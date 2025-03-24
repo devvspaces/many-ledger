@@ -1,17 +1,14 @@
 "use client";
 
-import React from "react";
-import {
-  Heading,
-} from "@chakra-ui/react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 // Main App Component
-const CryptoWalletDashboard = () => {
-  return (
-    <Heading as="h1" size="2xl">
-      Crypto Wallet Dashboard
-    </Heading>
-  )
+const Home = () => {
+  const router = useRouter();
+  useEffect(() => {
+    router.push("/login")
+  }, [])
 };
 
-export default CryptoWalletDashboard;
+export default Home;
