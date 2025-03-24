@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Robust Ledger",
-  description: "A simple ledger app",
+  title: "PayVault Ledger",
+  description: "A blockchain-based ledger vault built on the MPC protocol.",
 };
 
 export default function RootLayout({
