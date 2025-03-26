@@ -1,12 +1,15 @@
 import axios from "axios";
 import config from "./config";
 import { AUTH_TOKENS_KEY } from "./constants";
+
 const API = axios.create({
   baseURL: config.BASE_URL,
   headers: {
     "x-api-key": config.API_KEY,
   },
 });
+
+let isRefreshing = false;
 
 const refreshAuthToken = async () => {
   const tokens = localStorage.getItem("tokens");
@@ -31,13 +34,29 @@ const refreshAuthToken = async () => {
   throw new Error("No refresh token found");
 };
 
+const handleLogout = () => {
+  // Clear tokens from localStorage
+  localStorage.removeItem("tokens");
+  localStorage.removeItem("user");
+
+  // Redirect to login page
+  // Adjust the path as needed for your routing
+  window.location.href = "/login";
+};
+
 API.interceptors.request.use((req) => {
   if (localStorage.getItem("tokens")) {
     const tokens = localStorage.getItem("tokens");
     if (tokens) {
-      const access = JSON.parse(tokens).access;
-      if (access) {
-        req.headers.Authorization = `Bearer ${access}`;
+      try {
+        const access = JSON.parse(tokens).access;
+        if (access) {
+          req.headers.Authorization = `Bearer ${access}`;
+        }
+      } catch {
+        // Clear tokens from localStorage
+        localStorage.removeItem("tokens");
+        localStorage.removeItem("user");
       }
     }
   }
@@ -49,19 +68,39 @@ API.interceptors.response.use(
     return response;
   },
   async (error) => {
-    if (error.response.status === 401) {
+    const originalRequest = error.config;
+
+    // Only attempt to refresh if it's a 401 error and we haven't already tried to refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Prevent multiple simultaneous refresh attempts
+      if (isRefreshing) {
+        return Promise.reject(error);
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
       try {
-        // Call a function to refresh the token
+        // Attempt to refresh the token
         const newToken = await refreshAuthToken();
-        error.config.headers["Authorization"] = `Bearer ${newToken}`;
-        // Retry the original request with the new token
-        return axios(error.config);
+
+        // Update the original request with the new token
+        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+
+        // Reset the refreshing flag
+        isRefreshing = false;
+
+        // Retry the original request
+        return axios(originalRequest);
       } catch (refreshError) {
-        console.error("Token refresh failed:", refreshError);
-        // Optionally redirect to login
+        // If refresh fails, logout the user
+        isRefreshing = false;
+        handleLogout();
+
         return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );

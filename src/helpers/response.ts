@@ -1,3 +1,9 @@
+export interface ApiResponse<T> {
+  data: T;
+  success: boolean;
+  path: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -186,11 +192,9 @@ export interface Notification {
 // DashboardView response
 export interface DashboardResponse {
   total_balance: number;
-  // A mapping of currency (e.g. "BTC", "USD") to its balance
   currency_balance: Record<string, number>;
-  // A mapping of currency (e.g. "BTC", "USD") to its price
   currency_price: Record<string, number>;
-  // List of transactions (using your existing Transaction interface)
+  crypto_rates: Record<string, Record<string, string | number>>;
   transactions: Transaction[];
 }
 

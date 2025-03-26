@@ -7,7 +7,7 @@ import {
   ResetPasswordDto,
 } from "@/helpers/dtos";
 import { AxiosError } from "axios";
-import { AuthResponse, RegisterResponse } from "@/helpers/response";
+import { RegisterResponse } from "@/helpers/response";
 
 export const login = createAsyncThunk(
   "login",
@@ -15,12 +15,12 @@ export const login = createAsyncThunk(
     const url = `/account/login/`;
     dispatch(startLoading());
     try {
-      const response = await API.post<AuthResponse>(url, req);
+      const response = await API.post(url, req);
       dispatch(stopLoading());
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
-      dispatch(execLogin(response.data));
+      dispatch(execLogin(response.data.data));
     } catch (err) {
       dispatch(stopLoading());
       if (err instanceof AxiosError && err.response) {

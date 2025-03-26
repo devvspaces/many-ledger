@@ -19,11 +19,14 @@ import {
   Checkbox,
   Link,
   useToast,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { FiEye, FiEyeOff, FiLock, FiArrowRight } from "react-icons/fi";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppDispatch } from "@/store/hooks";
+import { login } from "@/store/thunks/authThunk";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -65,6 +68,11 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [errors, setErrors] = useState<{
+    username?: string[];
+    password?: string[];
+  }>({});
+  const dispatch = useAppDispatch();
 
   const router = useRouter();
   const toast = useToast();
@@ -81,7 +89,9 @@ const LoginPage = () => {
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const highlightColor = "brand.500";
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const handleLogin = async (
+    e: React.FormEvent<HTMLFormElement>
+  ): Promise<void> => {
     e.preventDefault();
 
     if (!username || !password) {
@@ -95,22 +105,39 @@ const LoginPage = () => {
       });
       return;
     }
-
     setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast({
-        title: "Login successful",
-        description: "Welcome back to your wallet!",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    dispatch(
+      login({
+        username,
+        password,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast({
+          title: "Login successful",
+          description: "Welcome back to your wallet!",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        router.push("/dashboard");
+      })
+      .catch((err) => {
+        setErrors(err.data);
+        toast({
+          title: "Error",
+          description: "An error occurred while signing in",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setLoading(false);
       });
-      router.push("/dashboard");
-    }, 1500);
   };
 
   return (
@@ -198,7 +225,7 @@ const LoginPage = () => {
               <MotionBox variants={itemVariants} w="full">
                 <form onSubmit={handleLogin}>
                   <VStack spacing={5} align="flex-start">
-                    <FormControl isRequired>
+                    <FormControl isRequired isInvalid={!!errors.username}>
                       <FormLabel>Username</FormLabel>
                       <InputGroup>
                         <Input
@@ -216,9 +243,12 @@ const LoginPage = () => {
                           bg={useColorModeValue("white", "gray.700")}
                         />
                       </InputGroup>
+                      <FormErrorMessage>
+                        {errors.username && errors.username[0]}
+                      </FormErrorMessage>
                     </FormControl>
 
-                    <FormControl isRequired>
+                    <FormControl isRequired isInvalid={!!errors.password}>
                       <FormLabel>Password</FormLabel>
                       <InputGroup>
                         <Input
@@ -247,6 +277,9 @@ const LoginPage = () => {
                           />
                         </InputRightElement>
                       </InputGroup>
+                      <FormErrorMessage>
+                        {errors.password && errors.password[0]}
+                      </FormErrorMessage>
                     </FormControl>
 
                     <Flex width="100%" justify="space-between" align="center">

@@ -25,8 +25,9 @@ import {
 } from "react-icons/fi";
 import { useRouter } from "next/navigation";
 import { PiHandWithdrawBold } from "react-icons/pi";
+import { withAuth } from "@/hoc/withAuth";
 
-export default function Layout({
+function Layout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -289,3 +290,7 @@ export default function Layout({
     </Box>
   );
 }
+
+const AuthLayout = withAuth(Layout);
+
+export default AuthLayout;

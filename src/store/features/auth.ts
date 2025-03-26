@@ -20,7 +20,11 @@ function loadState<T>(key: string): T | null {
   if (serializedState === null) {
     return null;
   }
-  return JSON.parse(serializedState);
+  try {
+    return JSON.parse(serializedState);
+  } catch {
+    return null;
+  }
 }
 
 // Initial state

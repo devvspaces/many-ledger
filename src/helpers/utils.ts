@@ -1,12 +1,3 @@
-import { HourValue } from "./response";
-
-export function businessDayToText(businessDay?: HourValue): string {
-  if (businessDay?.closed) {
-    return "Closed";
-  }
-  return `${businessDay?.open} - ${businessDay?.close}`;
-}
-
 export function createListQuery(params: Record<string, string[] | string>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {

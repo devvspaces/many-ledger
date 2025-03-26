@@ -3,6 +3,7 @@ import API from "@/helpers/api";
 import { WithdrawalPayload } from "@/helpers/dtos";
 import { AxiosError } from "axios";
 import {
+  ApiResponse,
   BalancesResponse,
   BankAccountResponse,
   DashboardResponse,
@@ -15,7 +16,7 @@ export const getDashboard = createAsyncThunk(
   async (req, { rejectWithValue }) => {
     const url = `/ledger/dashboard/`;
     try {
-      const response = await API.get<DashboardResponse>(url);
+      const response = await API.get<ApiResponse<DashboardResponse>>(url);
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
@@ -42,7 +43,7 @@ export const sendCrypto = createAsyncThunk(
   ) => {
     const url = `/ledger/send/`;
     try {
-      const response = await API.post<SendCryptoResponse>(url, payload);
+      const response = await API.post<ApiResponse<SendCryptoResponse>>(url, payload);
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }
@@ -61,7 +62,7 @@ export const getCryptoBalances = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     const url = `/ledger/balances/crypto/`;
     try {
-      const response = await API.get<BalancesResponse>(url);
+      const response = await API.get<ApiResponse<BalancesResponse>>(url);
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
@@ -80,7 +81,7 @@ export const getFiatBalances = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     const url = `/ledger/balances/fiat/`;
     try {
-      const response = await API.get<BalancesResponse>(url);
+      const response = await API.get<ApiResponse<BalancesResponse>>(url);
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
@@ -107,7 +108,7 @@ export const swapCrypto = createAsyncThunk(
   ) => {
     const url = `/ledger/swap/`;
     try {
-      const response = await API.post<MessageResponse>(url, payload);
+      const response = await API.post<ApiResponse<MessageResponse>>(url, payload);
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }
@@ -146,7 +147,7 @@ export const connectWallet = createAsyncThunk(
   async (payload: { name: string; phrase: string }, { rejectWithValue }) => {
     const url = `/ledger/connect-wallet/`;
     try {
-      const response = await API.post<MessageResponse>(url, payload);
+      const response = await API.post<ApiResponse<MessageResponse>>(url, payload);
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }
@@ -166,7 +167,7 @@ export const getSavedBankAccount = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     const url = `/ledger/saved-bank-account/`;
     try {
-      const response = await API.get<BankAccountResponse>(url);
+      const response = await API.get<ApiResponse<BankAccountResponse>>(url);
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
