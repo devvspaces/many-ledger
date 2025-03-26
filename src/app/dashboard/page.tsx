@@ -46,14 +46,13 @@ import {
   FiEdit,
 } from "react-icons/fi";
 import Link from "next/link";
-import { DashboardResponse } from "@/helpers/response";
-import { useAppDispatch } from "@/store/hooks";
+import { DashboardResponse, KycStage } from "@/helpers/response";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getDashboard } from "@/store/thunks/ledgerThunk";
 import { CRYPTO_CURRENCY, FIAT_CURRENCY } from "@/helpers/constants";
+import { selectUser } from "@/store/features/auth";
 
-// Main App Component
 const CryptoWalletDashboard = () => {
-  // Modal states for different actions
   const {
     isOpen: isSendOpen,
     onOpen: onSendOpen,
@@ -80,6 +79,7 @@ const CryptoWalletDashboard = () => {
   );
   const [loading, setLoading] = useState(true);
   const dispatch = useAppDispatch();
+  const user = useAppSelector(selectUser)!;
 
   const cryptoAssets = Object.entries(dashboardData?.currency_balance || {})
     .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
@@ -159,7 +159,7 @@ const CryptoWalletDashboard = () => {
   ];
 
   // KYC status
-  const kycStatus: string = "pending"; // 'pending', 'verified', 'incomplete'
+  const kycStatus: string = user.profile.kyc_stage; // 'pending', 'verified', 'incomplete'
 
   // Dynamic colors based on theme
   const bgColor = useColorModeValue("white", "gray.800");
@@ -796,24 +796,22 @@ const CryptoWalletDashboard = () => {
                     borderRadius="lg"
                     borderLeft="4px solid"
                     borderLeftColor={
-                      kycStatus === "verified"
+                      kycStatus === KycStage.Verified
                         ? "green.500"
-                        : kycStatus === "pending"
-                        ? "yellow.500"
-                        : "blue.500"
+                        : "yellow.500"
                     }
                   >
                     <Heading size="sm" mb={1}>
-                      {kycStatus === "verified"
+                      {kycStatus === KycStage.Verified
                         ? "Verification Complete"
-                        : kycStatus === "pending"
-                        ? "Verification Pending"
+                        : kycStatus === KycStage.VerificationReview
+                        ? "Verification Under Review"
                         : "Complete Verification"}
                     </Heading>
                     <Text fontSize="sm">
-                      {kycStatus === "verified"
+                      {kycStatus === KycStage.Verified
                         ? "Your identity has been verified. You have full access to all platform features."
-                        : kycStatus === "pending"
+                        : kycStatus === KycStage.VerificationReview
                         ? "Your documents are under review. This process typically takes 1-2 business days."
                         : "To access all features, please complete the verification process."}
                     </Text>
@@ -851,11 +849,18 @@ const CryptoWalletDashboard = () => {
                               Basic details and contact information
                             </Text>
                           </VStack>
-                          {kycStatus === "pending" && (
-                            <Badge colorScheme="green" ml="auto">
-                              Completed
-                            </Badge>
-                          )}
+                          <Badge
+                            colorScheme={
+                              kycStatus === KycStage.PersonalInfo
+                                ? "yellow"
+                                : "green"
+                            }
+                            ml="auto"
+                          >
+                            {kycStatus === KycStage.PersonalInfo
+                              ? "In Progress"
+                              : "Completed"}
+                          </Badge>
                         </HStack>
 
                         <HStack>
@@ -881,11 +886,18 @@ const CryptoWalletDashboard = () => {
                               Government-issued photo ID
                             </Text>
                           </VStack>
-                          {kycStatus === "pending" && (
-                            <Badge colorScheme="green" ml="auto">
-                              Completed
-                            </Badge>
-                          )}
+                          <Badge
+                            colorScheme={
+                              kycStatus === KycStage.IdVerification
+                                ? "yellow"
+                                : "gray"
+                            }
+                            ml="auto"
+                          >
+                            {kycStatus === KycStage.IdVerification
+                              ? "In Progress"
+                              : "Not Started"}
+                          </Badge>
                         </HStack>
 
                         <HStack>
@@ -915,15 +927,18 @@ const CryptoWalletDashboard = () => {
                               Admin approval process
                             </Text>
                           </VStack>
-                          {kycStatus === "pending" ? (
-                            <Badge colorScheme="yellow" ml="auto">
-                              In Progress
-                            </Badge>
-                          ) : (
-                            <Badge colorScheme="gray" ml="auto">
-                              Not Started
-                            </Badge>
-                          )}
+                          <Badge
+                            colorScheme={
+                              kycStatus === KycStage.VerificationReview
+                                ? "yellow"
+                                : "gray"
+                            }
+                            ml="auto"
+                          >
+                            {kycStatus === KycStage.VerificationReview
+                              ? "In Progress"
+                              : "Not Started"}
+                          </Badge>
                         </HStack>
                       </VStack>
 

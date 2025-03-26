@@ -26,6 +26,9 @@ import {
 import { useRouter } from "next/navigation";
 import { PiHandWithdrawBold } from "react-icons/pi";
 import { withAuth } from "@/hoc/withAuth";
+import { useAppSelector } from "@/store/hooks";
+import { selectUser } from "@/store/features/auth";
+import { KycStage } from "@/helpers/response";
 
 function Layout({
   children,
@@ -33,6 +36,7 @@ function Layout({
   children: React.ReactNode;
 }>) {
   const router = useRouter();
+  const user = useAppSelector(selectUser)!;
 
   const navRoute = {
     home: "/dashboard",
@@ -59,7 +63,7 @@ function Layout({
   const notificationCount = 3;
 
   // KYC status
-  const kycStatus: string = "pending"; // 'pending', 'verified', 'incomplete'
+  const kycStatus: string = user.profile.kyc_stage; // 'pending', 'verified', 'incomplete'
 
   // Dynamic colors based on theme
   const bgColor = useColorModeValue("white", "gray.800");
@@ -89,15 +93,15 @@ function Layout({
           justifyContent="space-between"
         >
           <HStack spacing={2}>
-            <Avatar size="sm" name="User" bg="brand.500" />
+            <Avatar size="sm" name={user.username} bg="brand.500" />
             <VStack spacing={0} alignItems="flex-start">
               <Text fontWeight="bold" fontSize="md">
-                My Wallet
+                Welcome, {user.username}
               </Text>
               <Badge
-                colorScheme={kycStatus === "verified" ? "green" : "yellow"}
+                colorScheme={kycStatus === KycStage.Verified ? "green" : "yellow"}
               >
-                {kycStatus === "verified" ? "Verified" : "Verification Pending"}
+                {kycStatus === KycStage.Verified ? "Verified" : "Verification Pending"}
               </Badge>
             </VStack>
           </HStack>

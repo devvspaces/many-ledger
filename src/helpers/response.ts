@@ -14,6 +14,7 @@ export interface User {
   admin: boolean;
   created: string; // Represents the auto_now timestamp from 'created'
   last_login?: string; // Typically provided by AbstractBaseUser (optional)
+  profile: Profile;
 }
 
 export interface AuthToken {
