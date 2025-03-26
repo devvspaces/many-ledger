@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   VStack,
@@ -35,6 +35,9 @@ import {
   Alert,
   AlertIcon,
   AlertDescription,
+  Center,
+  Spinner,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -51,7 +54,16 @@ import {
   FiCopy,
   FiEdit,
   FiLock,
+  FiEdit2,
 } from "react-icons/fi";
+import { Profile } from "@/helpers/response";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  changeUsername,
+  getProfile,
+  updateProfile,
+} from "@/store/thunks/settingsThunk";
+import { selectUser } from "@/store/features/auth";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -85,33 +97,45 @@ const spring = {
 
 // Settings Page Component
 const SettingsPage = () => {
-  // State for user data
-  const [userData, setUserData] = useState({
-    name: "Alex Thompson",
-    email: "alex.thompson@example.com",
-    accountId: "0x7F5E8bD824F7...EA3D",
-    phone: "+1 (555) 123-4567",
-    country: "United States",
-  });
+  const dispatch = useAppDispatch();
+  const user = useAppSelector(selectUser)!;
 
   // State for notification settings
-  const [notifications, setNotifications] = useState({
-    payments: true,
-    signIn: true,
-    security: true,
-  });
+  // const [notifications, setNotifications] = useState({
+  //   payments: true,
+  //   signIn: true,
+  //   security: true,
+  // });
 
   // State for security settings
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [accountDetails, setAccountDetails] = useState<Profile | null>(null);
+
+  const twoFactorEnabled = accountDetails?.two_factor;
+  const setTwoFactorEnabled = (val: boolean) => {
+    if (accountDetails) {
+      setAccountDetails({ ...accountDetails, two_factor: val });
+    }
+  };
+
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [transactionPin, setTransactionPin] = useState("");
 
+  // Fetch account details
+  useEffect(() => {
+    dispatch(getProfile())
+      .unwrap()
+      .then((data) => {
+        setAccountDetails(data);
+      })
+      .catch((err) => console.error(err));
+  }, [dispatch]);
+
   // Modal controls
   const profileModal = useDisclosure();
-  const emailModal = useDisclosure();
+  const usernameModal = useDisclosure();
   const passwordModal = useDisclosure();
   const walletModal = useDisclosure();
   const pinModal = useDisclosure();
@@ -128,6 +152,10 @@ const SettingsPage = () => {
   const iconBgColor = useColorModeValue("brand.50", "rgba(0, 102, 204, 0.2)");
 
   // Handle profile update
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>(
+    {}
+  );
   const handleProfileUpdate = () => {
     // Simulate loading
     const loadingToast = toast({
@@ -139,44 +167,94 @@ const SettingsPage = () => {
       position: "top",
     });
 
-    setTimeout(() => {
-      toast.close(loadingToast);
-      toast({
-        title: "Profile updated",
-        description: "Your profile information has been successfully updated.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    setUpdatingProfile(true);
+    dispatch(updateProfile(accountDetails!))
+      .unwrap()
+      .then(() => {
+        toast.close(loadingToast);
+        toast({
+          title: "Profile updated",
+          description:
+            "Your profile information has been successfully updated.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        profileModal.onClose();
+        setProfileErrors({});
+      })
+      .catch((err) => {
+        console.log(err);
+        setProfileErrors(err.data);
+        toast.close(loadingToast);
+        toast({
+          title: "Error updating profile",
+          description: "An error occurred while updating your profile.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setUpdatingProfile(false);
       });
-      profileModal.onClose();
-    }, 1500);
   };
 
   // Handle email update
-  const handleEmailUpdate = () => {
+  const [username, setUsername] = useState("");
+  const [usernamePassword, setUsernamePassword] = useState("");
+  const [updatingUsername, setUpdatingUsername] = useState(false);
+  const [usernameErrors, setUsernameErrors] = useState<Record<string, string>>(
+    {}
+  );
+  const handleUsernameUpdate = () => {
     // Simulate loading
     const loadingToast = toast({
-      title: "Updating email",
-      description: "Please wait while we update your email address...",
+      title: "Updating username",
+      description: "Please wait while we update your username...",
       status: "loading",
       duration: null,
       isClosable: false,
       position: "top",
     });
-
-    setTimeout(() => {
-      toast.close(loadingToast);
-      toast({
-        title: "Email updated",
-        description: "Your email address has been successfully updated.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    setUpdatingUsername(true);
+    dispatch(
+      changeUsername({
+        new_username: username,
+        password: usernamePassword,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast.close(loadingToast);
+        toast({
+          title: "Username updated",
+          description: "Your username has been successfully updated.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        usernameModal.onClose();
+        setUsernameErrors({});
+      })
+      .catch((err) => {
+        setUsernameErrors(err.data);
+        toast.close(loadingToast);
+        toast({
+          title: "Error updating username",
+          description: "An error occurred while updating your username.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setUpdatingUsername(false);
       });
-      emailModal.onClose();
-    }, 1500);
   };
 
   // Handle password update
@@ -289,26 +367,111 @@ const SettingsPage = () => {
   };
 
   // Handle notification toggle
+  const notifications = {
+    payments: accountDetails?.notify_payments,
+    signIn: accountDetails?.notify_signin,
+    security: accountDetails?.notify_security,
+  };
+  const setNotifications = (val: {
+    payments?: boolean;
+    signIn?: boolean;
+    security?: boolean;
+  }) => {
+    if (accountDetails) {
+      setAccountDetails({
+        ...accountDetails,
+        ...{
+          notify_payments: val.payments ?? accountDetails.notify_payments,
+          notify_signin: val.signIn ?? accountDetails.notify_signin,
+          notify_security: val.security ?? accountDetails.notify_security,
+        },
+      });
+    }
+  };
+  const [updatingPaymentNotifications, setUpdatingPaymentNotifications] =
+    useState(false);
+  const [updatingSecurityNotifications, setUpdatingSecurityNotifications] =
+    useState(false);
+  const [updatingSigninNotifications, setUpdatingSigninNotifications] =
+    useState(false);
   const handleNotificationToggle = (type: keyof typeof notifications) => {
-    setNotifications({
-      ...notifications,
-      [type]: !notifications[type],
-    });
+    const handleSuccess = () => {
+      setNotifications({
+        ...notifications,
+        [type]: !notifications[type],
+      });
 
-    toast({
-      title: `${type.charAt(0).toUpperCase() + type.slice(1)} notifications ${
-        notifications[type] ? "disabled" : "enabled"
-      }`,
-      status: "success",
-      duration: 2000,
-      isClosable: true,
-      position: "top",
-    });
+      toast({
+        title: `${type.charAt(0).toUpperCase() + type.slice(1)} notifications ${
+          notifications[type] ? "disabled" : "enabled"
+        }`,
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+        position: "top",
+      });
+    };
+
+    const handleError = (err: unknown) => {
+      console.log(err);
+      toast({
+        title: "Error updating settings",
+        description: "An error occurred while updating your settings.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+        position: "top",
+      });
+    };
+
+    switch (type) {
+      case "payments":
+        if (updatingPaymentNotifications) return;
+        setUpdatingPaymentNotifications(true);
+        dispatch(
+          updateProfile({
+            notify_payments: !notifications.payments,
+          })
+        )
+          .unwrap()
+          .then(handleSuccess)
+          .catch(handleError)
+          .finally(() => setUpdatingPaymentNotifications(false));
+        break;
+      case "security":
+        if (updatingSecurityNotifications) return;
+        setUpdatingSecurityNotifications(true);
+        dispatch(
+          updateProfile({
+            notify_security: !notifications.security,
+          })
+        )
+          .unwrap()
+          .then(handleSuccess)
+          .catch(handleError)
+          .finally(() => setUpdatingSecurityNotifications(false));
+        break;
+      case "signIn":
+        if (updatingSigninNotifications) return;
+        setUpdatingSigninNotifications(true);
+        dispatch(
+          updateProfile({
+            notify_signin: !notifications.signIn,
+          })
+        )
+          .unwrap()
+          .then(handleSuccess)
+          .catch(handleError)
+          .finally(() => setUpdatingSigninNotifications(false));
+        break;
+      default:
+        break;
+    }
   };
 
   // Handle account ID copy
   const handleCopyId = () => {
-    navigator.clipboard.writeText(userData.accountId);
+    navigator.clipboard.writeText(user.username);
     toast({
       title: "Account ID copied",
       description: "Account ID has been copied to clipboard.",
@@ -431,9 +594,9 @@ const SettingsPage = () => {
             />
             <SettingItem
               icon={FiMail}
-              title="Update Email"
-              description="Change your registered email address"
-              onClick={emailModal.onOpen}
+              title="Update Username"
+              description="Change your registered username"
+              onClick={usernameModal.onOpen}
             />
           </VStack>
         </MotionBox>
@@ -550,77 +713,97 @@ const SettingsPage = () => {
             <ModalHeader>Account Profile</ModalHeader>
             <ModalCloseButton />
             <ModalBody pb={6}>
-              <VStack spacing={5} align="center" mb={6}>
-                <Avatar size="xl" name={userData.name} bg="brand.500" />
-                <HStack>
-                  <Text fontWeight="medium" fontSize="sm">
-                    Account ID: {userData.accountId}
-                  </Text>
-                  <Tooltip label="Copy Account ID">
-                    <IconButton
-                      aria-label="Copy Account ID"
-                      icon={<FiCopy />}
-                      size="xs"
-                      onClick={handleCopyId}
-                      variant="ghost"
-                    />
-                  </Tooltip>
-                </HStack>
-              </VStack>
+              <>
+                {accountDetails ? (
+                  <>
+                    <VStack spacing={5} align="center" mb={6}>
+                      <Avatar
+                        size="xl"
+                        name={accountDetails.fullname}
+                        bg="brand.500"
+                      />
+                      <HStack>
+                        <Text fontWeight="medium" fontSize="sm">
+                          Account ID: {user.username}
+                        </Text>
+                        <Tooltip label="Copy Account ID">
+                          <IconButton
+                            aria-label="Copy Account ID"
+                            icon={<FiCopy />}
+                            size="xs"
+                            onClick={handleCopyId}
+                            variant="ghost"
+                          />
+                        </Tooltip>
+                      </HStack>
+                    </VStack>
 
-              <VStack spacing={4}>
-                <FormControl>
-                  <FormLabel>Full Name</FormLabel>
-                  <Input
-                    value={userData.name}
-                    onChange={(e) =>
-                      setUserData({ ...userData, name: e.target.value })
-                    }
-                    focusBorderColor="brand.500"
-                    borderRadius="lg"
-                  />
-                </FormControl>
+                    <VStack spacing={4}>
+                      <FormControl isInvalid={!!profileErrors.fullname}>
+                        <FormLabel>Full Name</FormLabel>
+                        <Input
+                          value={accountDetails.fullname}
+                          onChange={(e) =>
+                            setAccountDetails({
+                              ...accountDetails,
+                              fullname: e.target.value,
+                            })
+                          }
+                          focusBorderColor="brand.500"
+                          borderRadius="lg"
+                        />
+                        <FormErrorMessage>
+                          {profileErrors.fullname}
+                        </FormErrorMessage>
+                      </FormControl>
 
-                <FormControl>
-                  <FormLabel>Email</FormLabel>
-                  <Input
-                    value={userData.email}
-                    onChange={(e) =>
-                      setUserData({ ...userData, email: e.target.value })
-                    }
-                    type="email"
-                    focusBorderColor="brand.500"
-                    borderRadius="lg"
-                  />
-                </FormControl>
+                      <FormControl isInvalid={!!profileErrors.email}>
+                        <FormLabel>Email</FormLabel>
+                        <Input
+                          value={accountDetails.email}
+                          onChange={(e) =>
+                            setAccountDetails({
+                              ...accountDetails,
+                              email: e.target.value,
+                            })
+                          }
+                          type="email"
+                          focusBorderColor="brand.500"
+                          borderRadius="lg"
+                        />
+                        <FormErrorMessage>
+                          {profileErrors.email}
+                        </FormErrorMessage>
+                      </FormControl>
 
-                <FormControl>
-                  <FormLabel>Phone Number</FormLabel>
-                  <Input
-                    value={userData.phone}
-                    onChange={(e) =>
-                      setUserData({ ...userData, phone: e.target.value })
-                    }
-                    focusBorderColor="brand.500"
-                    borderRadius="lg"
-                  />
-                </FormControl>
-
-                <FormControl>
-                  <FormLabel>Country</FormLabel>
-                  <Input
-                    value={userData.country}
-                    onChange={(e) =>
-                      setUserData({ ...userData, country: e.target.value })
-                    }
-                    focusBorderColor="brand.500"
-                    borderRadius="lg"
-                  />
-                </FormControl>
-              </VStack>
+                      <FormControl isInvalid={!!profileErrors.phone}>
+                        <FormLabel>Phone Number</FormLabel>
+                        <Input
+                          value={accountDetails.phone}
+                          onChange={(e) =>
+                            setAccountDetails({
+                              ...accountDetails,
+                              phone: e.target.value,
+                            })
+                          }
+                          focusBorderColor="brand.500"
+                          borderRadius="lg"
+                        />
+                        <FormErrorMessage>
+                          {profileErrors.phone}
+                        </FormErrorMessage>
+                      </FormControl>
+                    </VStack>
+                  </>
+                ) : (
+                  <Center>
+                    <Spinner size="md" color="brand.500" />
+                  </Center>
+                )}
+              </>
             </ModalBody>
 
-            <ModalFooter>
+            <ModalFooter hidden={!accountDetails}>
               <Button variant="ghost" mr={3} onClick={profileModal.onClose}>
                 Cancel
               </Button>
@@ -630,6 +813,7 @@ const SettingsPage = () => {
                 _hover={{ bg: "brand.600" }}
                 onClick={handleProfileUpdate}
                 leftIcon={<FiEdit />}
+                isLoading={updatingProfile}
               >
                 Save Changes
               </Button>
@@ -639,8 +823,8 @@ const SettingsPage = () => {
 
         {/* Email Update Modal */}
         <Modal
-          isOpen={emailModal.isOpen}
-          onClose={emailModal.onClose}
+          isOpen={usernameModal.isOpen}
+          onClose={usernameModal.onClose}
           isCentered
         >
           <ModalOverlay backdropFilter="blur(8px)" />
@@ -650,26 +834,31 @@ const SettingsPage = () => {
             <ModalBody pb={6}>
               <VStack spacing={4}>
                 <FormControl>
-                  <FormLabel>Current Email</FormLabel>
+                  <FormLabel>Current Username</FormLabel>
                   <Input
-                    value={userData.email}
+                    value={user.username}
                     isReadOnly
                     bg={sectionBgColor}
                     borderRadius="lg"
                   />
                 </FormControl>
 
-                <FormControl>
-                  <FormLabel>New Email</FormLabel>
+                <FormControl isInvalid={!!usernameErrors.new_username}>
+                  <FormLabel>New Username</FormLabel>
                   <Input
-                    placeholder="Enter new email address"
+                    placeholder="Enter new username"
                     focusBorderColor="brand.500"
                     borderRadius="lg"
-                    type="email"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                   />
+                  <FormErrorMessage>
+                    {usernameErrors.new_username}
+                  </FormErrorMessage>
                 </FormControl>
 
-                <FormControl>
+                <FormControl isInvalid={!!usernameErrors.password}>
                   <FormLabel>Password</FormLabel>
                   <InputGroup>
                     <Input
@@ -677,6 +866,8 @@ const SettingsPage = () => {
                       placeholder="Enter your password to confirm"
                       focusBorderColor="brand.500"
                       borderRadius="lg"
+                      value={usernamePassword}
+                      onChange={(e) => setUsernamePassword(e.target.value)}
                     />
                     <InputRightElement>
                       <IconButton
@@ -690,22 +881,24 @@ const SettingsPage = () => {
                       />
                     </InputRightElement>
                   </InputGroup>
+                  <FormErrorMessage>{usernameErrors.password}</FormErrorMessage>
                 </FormControl>
               </VStack>
             </ModalBody>
 
             <ModalFooter>
-              <Button variant="ghost" mr={3} onClick={emailModal.onClose}>
+              <Button variant="ghost" mr={3} onClick={usernameModal.onClose}>
                 Cancel
               </Button>
               <Button
                 bg="brand.500"
                 color="white"
                 _hover={{ bg: "brand.600" }}
-                onClick={handleEmailUpdate}
-                leftIcon={<FiMail />}
+                onClick={handleUsernameUpdate}
+                leftIcon={<FiEdit2 />}
+                isLoading={updatingUsername}
               >
-                Update Email
+                Update Username
               </Button>
             </ModalFooter>
           </ModalContent>
@@ -815,7 +1008,7 @@ const SettingsPage = () => {
                 </AlertDescription>
               </Alert>
 
-              <VStack mt={'2rem'} spacing={4} align="stretch">
+              <VStack mt={"2rem"} spacing={4} align="stretch">
                 <Text fontWeight="medium">Your Wallet Phrase</Text>
                 <Box
                   bg={modalBg}
@@ -825,7 +1018,10 @@ const SettingsPage = () => {
                   borderLeftColor="brand.500"
                   width="full"
                 >
-                  <Text fontSize="sm" color={useColorModeValue("gray.700", "gray.300")}>
+                  <Text
+                    fontSize="sm"
+                    color={useColorModeValue("gray.700", "gray.300")}
+                  >
                     Your wallet phrase will be displayed here. Make sure to keep
                     it safe and do not share it with anyone.
                   </Text>

@@ -2,7 +2,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import API from "@/helpers/api";
 import { UpdateProfile } from "@/helpers/dtos";
 import { AxiosError } from "axios";
-import { Profile } from "@/helpers/response";
+import { ApiResponse, Profile } from "@/helpers/response";
 
 export const changeUsername = createAsyncThunk(
   "changeUsername",
@@ -83,7 +83,7 @@ export const updateProfile = createAsyncThunk(
   async (req: UpdateProfile, { rejectWithValue }) => {
     const url = `/account/profile/`;
     try {
-      const response = await API.patch<Profile>(url, req);
+      const response = await API.patch<ApiResponse<Profile>>(url, req);
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
@@ -125,11 +125,11 @@ export const getProfile = createAsyncThunk(
   async (req, { rejectWithValue }) => {
     const url = `/account/profile/`;
     try {
-      const response = await API.get<Profile>(url);
+      const response = await API.get<ApiResponse<Profile>>(url);
       if (response.status !== 200) {
         return rejectWithValue(response.data);
       }
-      return response.data;
+      return response.data.data;
     } catch (err) {
       if (err instanceof AxiosError && err.response) {
         return rejectWithValue(err.response.data);
