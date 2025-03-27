@@ -29,6 +29,31 @@ export const changeUsername = createAsyncThunk(
   }
 );
 
+export const changePassword = createAsyncThunk(
+  "changePassword",
+  async (
+    req: {
+      old_password: string;
+      new_password: string;
+    },
+    { rejectWithValue }
+  ) => {
+    const url = `/account/change-password/`;
+    try {
+      const response = await API.patch(url, req);
+      if (response.status !== 200) {
+        return rejectWithValue(response.data);
+      }
+      return response.data;
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        return rejectWithValue(err.response.data);
+      }
+      return rejectWithValue(err);
+    }
+  }
+);
+
 export const setPin = createAsyncThunk(
   "setPin",
   async (

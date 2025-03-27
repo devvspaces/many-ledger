@@ -32,9 +32,6 @@ import {
   IconButton,
   Badge,
   Tooltip,
-  Alert,
-  AlertIcon,
-  AlertDescription,
   Center,
   Spinner,
   FormErrorMessage,
@@ -59,6 +56,7 @@ import {
 import { Profile } from "@/helpers/response";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
+  changePassword,
   changeUsername,
   getProfile,
   updateProfile,
@@ -137,7 +135,6 @@ const SettingsPage = () => {
   const profileModal = useDisclosure();
   const usernameModal = useDisclosure();
   const passwordModal = useDisclosure();
-  const walletModal = useDisclosure();
   const pinModal = useDisclosure();
   const twoFAModal = useDisclosure();
   const logoutModal = useDisclosure();
@@ -157,6 +154,7 @@ const SettingsPage = () => {
     {}
   );
   const handleProfileUpdate = () => {
+    setProfileErrors({})
     // Simulate loading
     const loadingToast = toast({
       title: "Updating profile",
@@ -210,6 +208,7 @@ const SettingsPage = () => {
     {}
   );
   const handleUsernameUpdate = () => {
+    setUsernameErrors({});
     // Simulate loading
     const loadingToast = toast({
       title: "Updating username",
@@ -238,7 +237,6 @@ const SettingsPage = () => {
           position: "top",
         });
         usernameModal.onClose();
-        setUsernameErrors({});
       })
       .catch((err) => {
         setUsernameErrors(err.data);
@@ -258,15 +256,16 @@ const SettingsPage = () => {
   };
 
   // Handle password update
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<
+    Record<string, string | string[]>
+  >({});
   const handlePasswordUpdate = () => {
+    setPasswordErrors({});
+
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: "Please make sure your passwords match.",
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+      setPasswordErrors({
+        confirm_password: "Passwords do not match",
       });
       return;
     }
@@ -281,21 +280,43 @@ const SettingsPage = () => {
       position: "top",
     });
 
-    setTimeout(() => {
-      toast.close(loadingToast);
-      toast({
-        title: "Password updated",
-        description: "Your password has been successfully updated.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    setUpdatingPassword(true);
+    dispatch(
+      changePassword({
+        new_password: newPassword,
+        old_password: password,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast({
+          title: "Password updated",
+          description: "Your password has been successfully updated.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        setPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        passwordModal.onClose();
+      })
+      .catch((err) => {
+        setPasswordErrors(err.data);
+        toast({
+          title: "Password Update Error",
+          description: "An error occurred while updating your password.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        toast.close(loadingToast);
+        setUpdatingPassword(false);
       });
-      setPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      passwordModal.onClose();
-    }, 1500);
   };
 
   // Handle transaction pin update
@@ -338,6 +359,7 @@ const SettingsPage = () => {
   };
 
   // Handle 2FA toggle
+  const [updating2fa, setUpdating2fa] = useState(false);
   const handleToggle2FA = () => {
     // Simulate loading
     const loadingToast = toast({
@@ -348,22 +370,44 @@ const SettingsPage = () => {
       isClosable: false,
       position: "top",
     });
-
-    setTimeout(() => {
-      toast.close(loadingToast);
-      setTwoFactorEnabled(!twoFactorEnabled);
-      toast({
-        title: twoFactorEnabled ? "2FA Disabled" : "2FA Enabled",
-        description: twoFactorEnabled
-          ? "Two-factor authentication has been disabled."
-          : "Two-factor authentication has been successfully enabled.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    setUpdating2fa(true);
+    dispatch(
+      updateProfile({
+        two_factor: !twoFactorEnabled,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        setTwoFactorEnabled(!twoFactorEnabled);
+        toast({
+          title: twoFactorEnabled ? "2FA Disabled" : "2FA Enabled",
+          description: twoFactorEnabled
+            ? "Two-factor authentication has been disabled."
+            : "Two-factor authentication has been successfully enabled.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        twoFAModal.onClose();
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "Two-Factor Authentication Error",
+          description:
+            err.data.two_factor[0] ||
+            "An error occurred while updating your 2FA settings.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        toast.close(loadingToast);
+        setUpdating2fa(false);
       });
-      twoFAModal.onClose();
-    }, 1500);
   };
 
   // Handle notification toggle
@@ -665,12 +709,6 @@ const SettingsPage = () => {
             />
             <SettingItem
               icon={FiLock}
-              title="Wallet Phrase"
-              description="View your wallet recovery phrase"
-              onClick={walletModal.onOpen}
-            />
-            <SettingItem
-              icon={FiLock}
               title="Transaction PIN"
               description="Set or update your transaction PIN"
               onClick={pinModal.onOpen}
@@ -916,7 +954,7 @@ const SettingsPage = () => {
             <ModalCloseButton />
             <ModalBody pb={6}>
               <VStack spacing={4}>
-                <FormControl>
+                <FormControl isInvalid={!!passwordErrors.old_password}>
                   <FormLabel>Current Password</FormLabel>
                   <InputGroup>
                     <Input
@@ -939,9 +977,12 @@ const SettingsPage = () => {
                       />
                     </InputRightElement>
                   </InputGroup>
+                  <FormErrorMessage>
+                    {passwordErrors.old_password}
+                  </FormErrorMessage>
                 </FormControl>
 
-                <FormControl>
+                <FormControl isInvalid={!!passwordErrors.new_password}>
                   <FormLabel>New Password</FormLabel>
                   <InputGroup>
                     <Input
@@ -953,9 +994,14 @@ const SettingsPage = () => {
                       borderRadius="lg"
                     />
                   </InputGroup>
+                  {((passwordErrors.new_password as string[]) ?? []).map(
+                    (error, index) => (
+                      <FormErrorMessage key={index}>{error}</FormErrorMessage>
+                    )
+                  )}
                 </FormControl>
 
-                <FormControl>
+                <FormControl isInvalid={!!passwordErrors.confirm_password}>
                   <FormLabel>Confirm New Password</FormLabel>
                   <InputGroup>
                     <Input
@@ -967,6 +1013,9 @@ const SettingsPage = () => {
                       borderRadius="lg"
                     />
                   </InputGroup>
+                  <FormErrorMessage>
+                    {passwordErrors.confirm_password}
+                  </FormErrorMessage>
                 </FormControl>
               </VStack>
             </ModalBody>
@@ -981,53 +1030,17 @@ const SettingsPage = () => {
                 _hover={{ bg: "brand.600" }}
                 onClick={handlePasswordUpdate}
                 leftIcon={<FiKey />}
-                isDisabled={!password || !newPassword || !confirmPassword}
+                isDisabled={
+                  !password ||
+                  !newPassword ||
+                  !confirmPassword ||
+                  updatingPassword
+                }
+                isLoading={updatingPassword}
               >
                 Update Password
               </Button>
             </ModalFooter>
-          </ModalContent>
-        </Modal>
-
-        {/* Wallet phrase view Modal */}
-        <Modal
-          isOpen={walletModal.isOpen}
-          onClose={walletModal.onClose}
-          isCentered
-        >
-          <ModalOverlay backdropFilter="blur(8px)" />
-          <ModalContent borderRadius="xl" bg={bgColor}>
-            <ModalHeader>Wallet Phrase</ModalHeader>
-            <ModalCloseButton />
-            <ModalBody pb={6}>
-              <Alert status="error" borderRadius="lg">
-                <AlertIcon />
-                <AlertDescription>
-                  Your wallet phrase is a secret recovery phrase that can be
-                  used to restore your account in case you lose access.
-                </AlertDescription>
-              </Alert>
-
-              <VStack mt={"2rem"} spacing={4} align="stretch">
-                <Text fontWeight="medium">Your Wallet Phrase</Text>
-                <Box
-                  bg={modalBg}
-                  p={4}
-                  borderRadius="lg"
-                  borderLeft="4px solid"
-                  borderLeftColor="brand.500"
-                  width="full"
-                >
-                  <Text
-                    fontSize="sm"
-                    color={useColorModeValue("gray.700", "gray.300")}
-                  >
-                    Your wallet phrase will be displayed here. Make sure to keep
-                    it safe and do not share it with anyone.
-                  </Text>
-                </Box>
-              </VStack>
-            </ModalBody>
           </ModalContent>
         </Modal>
 
@@ -1162,6 +1175,7 @@ const SettingsPage = () => {
                 _hover={{ bg: twoFactorEnabled ? "red.600" : "brand.600" }}
                 onClick={handleToggle2FA}
                 leftIcon={twoFactorEnabled ? <FiEyeOff /> : <FiShield />}
+                isLoading={updating2fa}
               >
                 {twoFactorEnabled ? "Disable 2FA" : "Enable 2FA"}
               </Button>
