@@ -34,6 +34,7 @@ import {
   Alert,
   AlertIcon,
   Progress,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -42,7 +43,6 @@ import {
   FiLock,
   FiUser,
   FiArrowRight,
-  FiMail,
   FiCheck,
   FiCopy,
   FiDownload,
@@ -50,6 +50,8 @@ import {
 } from "react-icons/fi";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppDispatch } from "@/store/hooks";
+import { register } from "@/store/thunks/authThunk";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -101,7 +103,6 @@ const phraseItemVariants = {
 
 const SignupPage = () => {
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -111,7 +112,8 @@ const SignupPage = () => {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [phrasesCopied, setPhrasesCopied] = useState(false);
   const [phrasesVerified, setPhrasesVerified] = useState(false);
-
+  
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -130,55 +132,6 @@ const SignupPage = () => {
   const highlightColor = "brand.500";
   const phraseBg = useColorModeValue("gray.50", "gray.700");
   const phraseBorder = useColorModeValue("gray.200", "gray.600");
-
-  // Generate recovery phrase
-  const generateRecoveryPhrase = () => {
-    // In a real app, this would be generated securely on the server
-    const wordList = [
-      "apple",
-      "banana",
-      "orange",
-      "grape",
-      "cherry",
-      "lemon",
-      "wallet",
-      "crypto",
-      "secure",
-      "token",
-      "block",
-      "chain",
-      "digital",
-      "asset",
-      "market",
-      "trade",
-      "exchange",
-      "ledger",
-      "private",
-      "public",
-      "key",
-      "value",
-      "node",
-      "hash",
-      "contract",
-      "smart",
-      "mine",
-      "coin",
-      "byte",
-      "code",
-    ];
-
-    // Randomly select 12 unique words
-    const selected: string[] = [];
-    while (selected.length < 12) {
-      const randomIndex = Math.floor(Math.random() * wordList.length);
-      const word = wordList[randomIndex];
-      if (!selected.includes(word)) {
-        selected.push(word);
-      }
-    }
-
-    return selected;
-  };
 
   // Check password strength
   const checkPasswordStrength = (value: string) => {
@@ -205,11 +158,16 @@ const SignupPage = () => {
     return "green.500";
   };
 
+  const [errors, setErrors] = useState<{
+    username?: string[];
+    password?: string[];
+  }>({});
   const handleSignup = async (e: { preventDefault: () => void; }) => {
+    setErrors({});
     e.preventDefault();
 
     // Form validation
-    if (!username || !email || !password || !confirmPassword) {
+    if (!username || !password || !confirmPassword) {
       toast({
         title: "Error",
         description: "Please fill in all fields",
@@ -258,18 +216,31 @@ const SignupPage = () => {
     }
 
     setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-
-      // Generate recovery phrase
-      const phrase = generateRecoveryPhrase();
-      setRecoveryPhrase(phrase);
-
-      // Open recovery phrase modal
-      onOpen();
-    }, 1500);
+    dispatch(
+      register({
+        username,
+        password,
+      })
+    )
+      .unwrap()
+      .then((data) => {
+        setRecoveryPhrase(data.data.phrase.split(" "));
+        onOpen();
+      })
+      .catch((err) => {
+        setErrors(err.data || {});
+        toast({
+          title: "Error",
+          description: "An error occurred while creating your account",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   const handleCopyPhrase = () => {
@@ -311,14 +282,14 @@ const SignupPage = () => {
   const finishSignup = () => {
     toast({
       title: "Account created",
-      description: "Your wallet is ready to use!",
+      description: "Your wallet is ready to use! Please login",
       status: "success",
       duration: 3000,
       isClosable: true,
       position: "top",
     });
     onClose();
-    router.push("/dashboard");
+    router.push("/login");
   };
 
   return (
@@ -408,7 +379,7 @@ const SignupPage = () => {
               <MotionBox variants={itemVariants} w="full">
                 <form onSubmit={handleSignup}>
                   <VStack spacing={5} align="flex-start">
-                    <FormControl isRequired>
+                    <FormControl isRequired isInvalid={!!errors.username}>
                       <FormLabel>Username</FormLabel>
                       <InputGroup>
                         <InputLeftElement pointerEvents="none">
@@ -429,32 +400,12 @@ const SignupPage = () => {
                           bg={useColorModeValue("white", "gray.700")}
                         />
                       </InputGroup>
+                      <FormErrorMessage>
+                        {errors.username && errors.username[0]}
+                      </FormErrorMessage>
                     </FormControl>
 
-                    <FormControl isRequired>
-                      <FormLabel>Email</FormLabel>
-                      <InputGroup>
-                        <InputLeftElement pointerEvents="none">
-                          <Icon as={FiMail} color="gray.500" />
-                        </InputLeftElement>
-                        <Input
-                          type="email"
-                          placeholder="Enter your email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          _hover={{ borderColor: "brand.400" }}
-                          _focus={{
-                            borderColor: "brand.500",
-                            boxShadow: "0 0 0 1px #0066CC",
-                          }}
-                          size="lg"
-                          borderRadius="xl"
-                          bg={useColorModeValue("white", "gray.700")}
-                        />
-                      </InputGroup>
-                    </FormControl>
-
-                    <FormControl isRequired>
+                    <FormControl isRequired isInvalid={!!errors.password}>
                       <FormLabel>Password</FormLabel>
                       <InputGroup>
                         <InputLeftElement pointerEvents="none">
@@ -521,6 +472,11 @@ const SignupPage = () => {
                           </Flex>
                         </Box>
                       )}
+                      {
+                        errors.password && errors.password.map((error, index) => (
+                          <FormErrorMessage key={index}>{error}</FormErrorMessage>
+                        ))
+                      }
                     </FormControl>
 
                     <FormControl isRequired>
@@ -553,18 +509,17 @@ const SignupPage = () => {
 
                     <FormControl>
                       <Checkbox
-                        colorScheme="brand"
                         isChecked={agreedToTerms}
                         onChange={(e) => setAgreedToTerms(e.target.checked)}
                         size="lg"
                       >
                         <Text fontSize="sm">
                           I agree to the{" "}
-                          <Link color="brand.500" href="#" isExternal>
+                          <Link color="brand.500" href="#">
                             Terms of Service
                           </Link>{" "}
                           and{" "}
-                          <Link color="brand.500" href="#" isExternal>
+                          <Link color="brand.500" href="#">
                             Privacy Policy
                           </Link>
                         </Text>
@@ -705,7 +660,7 @@ const SignupPage = () => {
                   onClick={handleCopyPhrase}
                   flex={1}
                   variant="outline"
-                  colorScheme="brand"
+                  colorScheme="blue"
                   isDisabled={phrasesCopied}
                 >
                   {phrasesCopied ? "Copied" : "Copy"}
@@ -715,7 +670,7 @@ const SignupPage = () => {
                   onClick={handleDownloadPhrase}
                   flex={1}
                   variant="outline"
-                  colorScheme="brand"
+                  colorScheme="blue"
                 >
                   Download
                 </Button>
@@ -724,7 +679,7 @@ const SignupPage = () => {
               {!phrasesVerified ? (
                 <VStack width="full" spacing={4} pt={2}>
                   <Checkbox
-                    colorScheme="brand"
+                    colorScheme="blue"
                     size="lg"
                     onChange={(e) => setPhrasesCopied(e.target.checked)}
                   >
@@ -761,7 +716,7 @@ const SignupPage = () => {
                     size="lg"
                     rightIcon={<FiArrowRight />}
                   >
-                    Continue to Dashboard
+                    Continue to Login
                   </Button>
                 </VStack>
               )}

@@ -31,6 +31,7 @@ import {
   InputLeftElement,
   Alert,
   AlertIcon,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { 
@@ -44,6 +45,8 @@ import {
 } from "react-icons/fi";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppDispatch } from "@/store/hooks";
+import { forgotPassword, resetPassword } from "@/store/thunks/authThunk";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -107,6 +110,7 @@ const ResetPasswordPage = () => {
   const [resetComplete, setResetComplete] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
 
+  const dispatch = useAppDispatch();
   const toast = useToast();
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -154,8 +158,19 @@ const ResetPasswordPage = () => {
 
   const handlePhraseInputChange = (index: number, value: string) => {
     const newPhraseInputs = [...phraseInputs];
-    newPhraseInputs[index] = value;
-    setPhraseInputs(newPhraseInputs);
+
+    const phrases = value.split(" ");
+    if (phrases.length > 1) {
+      phrases.forEach((phrase, i) => {
+        if (i + index < 12) {
+          newPhraseInputs[i + index] = phrase;
+        }
+      });
+      setPhraseInputs(newPhraseInputs);
+    } else {
+      newPhraseInputs[index] = value;
+      setPhraseInputs(newPhraseInputs);
+    }
 
     // if (value && index < 11) {
     //   phraseInputRefs[index + 1].current.focus();
@@ -204,27 +219,50 @@ const ResetPasswordPage = () => {
     
     // Simulate verification
     setVerifying(true);
-    
-    setTimeout(() => {
-      setVerifying(false);
-      setVerificationSuccess(true);
-      
-      // Show success message and proceed
-      toast({
-        title: "Recovery Phrase Verified",
-        description: "Your identity has been confirmed",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    const phrase = phraseInputs.join(" ");
+    dispatch(
+      forgotPassword({
+        username,
+        phrase,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        setVerificationSuccess(true);
+  
+        // Show success message and proceed
+        toast({
+          title: "Recovery Phrase Verified",
+          description: "Your identity has been confirmed",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        
+        // Open reset password modal
+        onOpen();
+      })
+      .catch((err) => {
+        console.log(err)
+        toast({
+          title: "Error",
+          description: "Either the username or recovery phrase is incorrect",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setVerifying(false);
       });
-      
-      // Open reset password modal
-      onOpen();
-    }, 2000);
   };
 
 
+  const [errors, setErrors] = useState<{
+    password?: string[];
+  }>({});
   const handleResetPassword = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     
@@ -267,28 +305,46 @@ const ResetPasswordPage = () => {
     
     // Simulate password reset
     setResetLoading(true);
+
+    dispatch(
+      resetPassword({
+        username,
+        phrase: phraseInputs.join(" "),
+        password,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        setResetComplete(true);
+        onClose();
+        toast({
+          title: "Password Reset Complete",
+          description: "Your password has been successfully updated",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        router.push("/login");
+      })
+      .catch((err) => {
+        setErrors(err.data);
+        toast({
+          title: "Error",
+          description: "An error occurred while updating your password",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setResetLoading(false);
+      });
     
     setTimeout(() => {
       setResetLoading(false);
-      setResetComplete(true);
       
-      // Close modal
-      onClose();
-      
-      // Show success message
-      toast({
-        title: "Password Reset Complete",
-        description: "Your password has been successfully updated",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
-      });
-      
-      // Redirect to login after a short delay
-      setTimeout(() => {
-        router.push("/login");
-      }, 2000);
     }, 1500);
   };
 
@@ -551,7 +607,7 @@ const ResetPasswordPage = () => {
         <ModalOverlay backdropFilter="blur(10px)" />
         <ModalContent borderRadius="xl" bg={glassBg} p={2}>
           <ModalHeader>
-            <Heading size="md" textAlign="center" color="brand.500">
+            <Heading size="md" textAlign="center" color="brand.100">
               Create New Password
             </Heading>
           </ModalHeader>
@@ -570,7 +626,7 @@ const ResetPasswordPage = () => {
               ) : (
                 <form onSubmit={handleResetPassword} style={{ width: "100%" }}>
                   <VStack spacing={4}>
-                    <FormControl isRequired>
+                    <FormControl isRequired isInvalid={!!errors.password}>
                       <FormLabel>New Password</FormLabel>
                       <InputGroup>
                         <InputLeftElement pointerEvents="none">
@@ -616,6 +672,11 @@ const ResetPasswordPage = () => {
                           </Flex>
                         </Box>
                       )}
+                      {
+                        errors.password && errors.password.map((error, index) => (
+                          <FormErrorMessage key={index}>{error}</FormErrorMessage>
+                        ))
+                      }
                     </FormControl>
 
                     <FormControl isRequired>

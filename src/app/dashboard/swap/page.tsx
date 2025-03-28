@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   VStack,
@@ -37,6 +37,12 @@ import {
   ModalCloseButton,
   useDisclosure,
   IconButton,
+  Image,
+  Center,
+  Spinner,
+  FormLabel,
+  PinInput,
+  PinInputField,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -47,6 +53,9 @@ import {
   FiAlertCircle,
   FiCheck,
 } from "react-icons/fi";
+import { useAppDispatch } from "@/store/hooks";
+import { getCryptoBalances, getFiatBalances, swapCrypto } from "@/store/thunks/ledgerThunk";
+import { CRYPTO_CURRENCY, FIAT_CURRENCY } from "@/helpers/constants";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -79,66 +88,138 @@ const spring = {
   damping: 20,
 };
 
-// Sample crypto data
-const cryptoOptions = [
-  {
-    value: "BTC",
-    label: "Bitcoin (BTC)",
-    icon: "₿",
-    balance: 0.0245,
-    price: 68251.32,
-    change: 2.4,
-  },
-  {
-    value: "ETH",
-    label: "Ethereum (ETH)",
-    icon: "Ξ",
-    balance: 0.5612,
-    price: 3480.12,
-    change: -1.2,
-  },
-  {
-    value: "SOL",
-    label: "Solana (SOL)",
-    icon: "◎",
-    balance: 12.3521,
-    price: 143.57,
-    change: 5.7,
-  },
-  {
-    value: "USDT",
-    label: "Tether (USDT)",
-    icon: "₮",
-    balance: 520.4231,
-    price: 1.0,
-    change: 0.01,
-  },
-];
-type CryptoOption = (typeof cryptoOptions)[number];
+type CryptoOption = {
+  value: string;
+  label: string;
+  logo: string;
+  balance: number;
+  price: number;
+  change: number;
+};
 
-// Sample fiat options
-const fiatOptions = [
-  { value: "USD", label: "US Dollar (USD)", symbol: "$" },
-  { value: "EUR", label: "Euro (EUR)", symbol: "€" },
-  { value: "GBP", label: "British Pound (GBP)", symbol: "£" },
-  { value: "JPY", label: "Japanese Yen (JPY)", symbol: "¥" },
-];
-type FiatOption = (typeof fiatOptions)[number];
+type FiatOption = {
+  value: string;
+  label: string;
+  icon: string;
+  balance: number;
+  price: number;
+};
 
 const SwapPage = () => {
+  const [loading, setLoading] = useState(false);
+  const [loadingFiat, setLoadingFiat] = useState(false);
+  const [cryptoOptions, setCryptoOptions] = useState<CryptoOption[]>([]);
+  const [fiatOptions, setFiatOptions] = useState<FiatOption[]>([]);
+  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
   const [fromType, setFromType] = useState("crypto");
-  const [toType, setToType] = useState("crypto");
-  const [fromAsset, setFromAsset] = useState(cryptoOptions[0].value);
-  const [toAsset, setToAsset] = useState(cryptoOptions[1].value);
+  const [toType, setToType] = useState("fiat");
+  const [fromAsset, setFromAsset] = useState<string | null>(null);
+  const [toAsset, setToAsset] = useState<string | null>(null);
   const [fromAmount, setFromAmount] = useState("0.01");
   const [toAmount, setToAmount] = useState("0");
   const [exchangeRate, setExchangeRate] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingRate, setLoadingRate] = useState(false);
+  const [pin, setPin] = useState("");
   const reviewModal = useDisclosure();
   const successModal = useDisclosure();
 
+  const dispatch = useAppDispatch();
   const toast = useToast();
+
+  const isFiat = useCallback((symbol: string) => {
+    return FIAT_CURRENCY[symbol] !== undefined;
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    dispatch(getCryptoBalances())
+      .unwrap()
+      .then((data) => {
+        const cryptoAssets = Object.entries(data.data.currency_balance || {})
+        .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
+        .map(([currency, balance]) => ({
+          label: `${CRYPTO_CURRENCY[currency].name} (${currency})`,
+          value: currency.toUpperCase(),
+          balance: balance,
+          price: (data.data.crypto_rates[currency]?.price as number) || 0,
+          change: parseFloat(
+            (
+              (data.data.crypto_rates[currency]
+                ?.percent_change_1h as number) || 0
+            ).toFixed(2)
+          ),
+          logo: CRYPTO_CURRENCY[currency].logo,
+        }));
+        setCryptoOptions(cryptoAssets);
+        setFromAsset(cryptoAssets[0].value);
+
+        const cryptoRates = Object.entries(data.data.currency_balance || {})
+        .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
+        .map(([currency]) => ({
+          [currency]: data.data.currency_price[currency] || 0
+        }));
+        setCurrencyRates((prev) => ({
+          ...prev,
+          ...Object.assign({}, ...cryptoRates),
+        }));
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "Error fetching data",
+          description: "An error occurred while fetching data",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+      
+    setLoadingFiat(true);
+    dispatch(getFiatBalances())
+    .unwrap()
+    .then((data) => {
+      const fiatAssets = Object.entries(data.data.currency_balance || {})
+      .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
+      .map(([currency, balance]) => ({
+        label: `${FIAT_CURRENCY[currency].name} (${currency})`,
+        value: currency.toUpperCase(),
+        balance: balance,
+        price: data.data.currency_price[currency] || 0,
+        icon: FIAT_CURRENCY[currency].icon,
+      }));
+      setFiatOptions(fiatAssets);
+      setToAsset(fiatAssets[0].value);
+
+      const fiatRates = Object.entries(data.data.currency_balance || {})
+      .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
+      .map(([currency]) => ({
+        [currency]: data.data.currency_price[currency] || 0
+      }));
+      setCurrencyRates((prev) => ({
+        ...prev,
+        ...Object.assign({}, ...fiatRates),
+      }));
+    })
+    .catch((err) => {
+      console.log(err);
+      toast({
+        title: "Error fetching data",
+        description: "An error occurred while fetching data",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+        position: "top",
+      });
+    })
+    .finally(() => {
+      setLoadingFiat(false);
+    });
+  }, [dispatch, toast]);
 
   // Color mode values
   const bgColor = useColorModeValue("white", "gray.800");
@@ -147,36 +228,18 @@ const SwapPage = () => {
   const cardBgColor = useColorModeValue("white", "gray.750");
   const secondaryTextColor = useColorModeValue("gray.600", "gray.400");
 
-  // Mock function to calculate rates
-  const calculateRate = () => {
+  const calculateRate = useCallback((from: string, to: string) => {
     setLoadingRate(true);
-
-    // Find the from and to assets
-    const fromCrypto = cryptoOptions.find((c) => c.value === fromAsset);
-    let toValue;
-
-    if (toType === "crypto") {
-      const toCrypto = cryptoOptions.find((c) => c.value === toAsset);
-      toValue = toCrypto?.price || 0;
-    } else {
-      // Assume conversion to fiat is at market price
-      toValue = 1; // For simplicity, we're using 1:1 for fiat conversions
-    }
-
-    // Calculate the exchange rate
-    if (fromCrypto && toValue) {
-      const rate = fromCrypto.price / toValue;
-
+    setTimeout(() => {
+      // Find the from and to assets
+      const rate = (currencyRates[from] / currencyRates[to]);
       // Apply a small fee (0.5%)
-      const rateWithFee = rate * 0.995;
-
-      setTimeout(() => {
-        setExchangeRate(rateWithFee);
-        setToAmount((parseFloat(fromAmount) * rateWithFee).toFixed(6));
-        setLoadingRate(false);
-      }, 800);
-    }
-  };
+      const rateWithFee = rate // * 0.995;
+      setExchangeRate(rateWithFee);
+      setToAmount((parseFloat(fromAmount) * rateWithFee).toFixed(isFiat(to) ? 2 : 6));
+      setLoadingRate(false);
+    }, 800);
+  }, [currencyRates, fromAmount, isFiat]);
 
   // Handle asset selection
   interface HandleAssetChangeParams {
@@ -204,20 +267,16 @@ const SwapPage = () => {
         type === "crypto" ? cryptoOptions[0].value : fiatOptions[0].value
       );
     }
-
-    // Recalculate rate after a type change
-    setTimeout(calculateRate, 100);
   };
 
   const handleAssetChange = ({ direction, value }: HandleAssetChangeParams) => {
     if (direction === "from") {
       setFromAsset(value);
+      calculateRate(value, toAsset!);
     } else {
       setToAsset(value);
+      calculateRate(fromAsset!, value);
     }
-
-    // Recalculate rate after an asset change
-    setTimeout(calculateRate, 100);
   };
 
   // Handle amount input
@@ -245,9 +304,6 @@ const SwapPage = () => {
     setFromAmount(toAmount);
     setToAmount(tempAmount);
 
-    // Recalculate rate
-    setTimeout(calculateRate, 100);
-
     // Show animation with toast
     toast({
       title: "Direction swapped",
@@ -268,37 +324,68 @@ const SwapPage = () => {
   // Handle confirm swap
   const handleConfirmSwap = () => {
     setIsLoading(true);
-    reviewModal.onClose();
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      successModal.onOpen();
-
-      toast({
-        title: "Swap initiated",
-        description:
-          "Your swap has been initiated and will be processed shortly",
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-        position: "top",
-      });
-    }, 2000);
+    dispatch(swapCrypto({
+      from_currency: fromAsset!,
+      to_currency: toAsset!,
+      amount: parseFloat(fromAmount),
+      pin,
+    }))
+      .unwrap()
+      .then(() => {
+        reviewModal.onClose();
+        successModal.onOpen();
+        toast({
+          title: "Swap initiated",
+          description:
+            "Your swap has been initiated and will be processed shortly",
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .catch((err) => {
+        console.log(err)
+        if (err.data.pin) {
+          toast({
+            title: "Error processing swap",
+            description: err.data.pin[0],
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+            position: "top",
+          });
+        } else {
+          reviewModal.onClose();
+          toast({
+            title: "Error processing swap",
+            description: err.data.amount[0] ?? "An error occurred while processing your swap",
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+            position: "top",
+          });
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      })
+    
   };
 
   // Initialize exchange rate on component mount
   useEffect(() => {
-    calculateRate();
-  }, []);
+    if (!fromAsset || !toAsset) return;
+    calculateRate(fromAsset, toAsset);
+  }, [fromAsset, toAsset, calculateRate]);
 
   // Get current asset info
-  const getAssetInfo = (type: string, asset: string) => {
+  const getAssetInfo = (type: string, asset: string | null) => {
+    if (!asset) return;
     if (type === "crypto") {
       return cryptoOptions.find((c) => c.value === asset);
-    } else {
-      return fiatOptions.find((f) => f.value === asset);
     }
+    return fiatOptions.find((f) => f.value === asset)
   };
 
   const fromAssetInfo = getAssetInfo(fromType, fromAsset);
@@ -322,7 +409,7 @@ const SwapPage = () => {
         <HStack spacing={2}>
           <Button
             size="xs"
-            colorScheme={type === "crypto" ? "brand" : "gray"}
+            colorScheme={type === "crypto" ? "blue" : "gray"}
             variant={type === "crypto" ? "solid" : "outline"}
             onClick={() =>
               handleTypeToggle({
@@ -335,7 +422,7 @@ const SwapPage = () => {
           </Button>
           <Button
             size="xs"
-            colorScheme={type === "fiat" ? "brand" : "gray"}
+            colorScheme={type === "fiat" ? "blue" : "gray"}
             variant={type === "fiat" ? "solid" : "outline"}
             onClick={() =>
               handleTypeToggle({
@@ -386,8 +473,10 @@ const SwapPage = () => {
               fontSize="lg"
             >
               {type === "crypto"
-                ? (fromAssetInfo as CryptoOption)?.icon
-                : (fromAssetInfo as FiatOption)?.symbol}
+                ? (
+                  <Image src={(fromAssetInfo as CryptoOption)?.logo} w={6} h={6} alt={fromAssetInfo?.label} />
+                )
+                : (fromAssetInfo as FiatOption)?.icon}
             </InputLeftElement>
             <NumberInput
               value={fromAmount}
@@ -433,8 +522,10 @@ const SwapPage = () => {
               fontSize="lg"
             >
               {type === "crypto"
-                ? (toAssetInfo as CryptoOption)?.icon
-                : (toAssetInfo as FiatOption)?.symbol}
+                ? (
+                  <Image src={(toAssetInfo as CryptoOption)?.logo} w={6} h={6} alt={toAssetInfo?.label} />
+                )
+                : (toAssetInfo as FiatOption)?.icon}
             </InputLeftElement>
             <Input
               value={toAmount}
@@ -487,7 +578,7 @@ const SwapPage = () => {
             },
           }}
         >
-          <HStack spacing={4} pb={2}>
+          <HStack spacing={4} pb={2} hidden={loading || loadingFiat}>
             {cryptoOptions.map((crypto) => (
               <MotionCard
                 key={crypto.value}
@@ -501,9 +592,12 @@ const SwapPage = () => {
               >
                 <CardBody p={4}>
                   <HStack mb={1}>
+                    <HStack spacing={2}>
+                      <Image src={crypto.logo} w={6} h={6} alt={crypto.label} />
                     <Text fontWeight="bold">
-                      {crypto.icon} {crypto.value}
+                      {crypto.value}
                     </Text>
+                    </HStack>
                     <Badge
                       colorScheme={crypto.change >= 0 ? "green" : "red"}
                       variant="subtle"
@@ -520,11 +614,39 @@ const SwapPage = () => {
                 </CardBody>
               </MotionCard>
             ))}
+            {fiatOptions.map((fiat) => (
+              <MotionCard
+                key={fiat.value}
+                minW="170px"
+                bg={cardBgColor}
+                borderRadius="xl"
+                borderWidth="1px"
+                borderColor={borderColor}
+                whileHover={{ scale: 1.05 }}
+                transition={spring}
+              >
+                <CardBody p={4}>
+                  <HStack mb={1}>
+                    <Text fontWeight="bold">
+                    {fiat.icon} {fiat.value}
+                    </Text>
+                  </HStack>
+                  <Text fontSize="lg" fontWeight="medium">
+                    ${fiat.price.toLocaleString()}
+                  </Text>
+                </CardBody>
+              </MotionCard>
+            ))}
           </HStack>
+          <Center hidden={!loading && !loadingFiat}>
+            <Spinner size={'md'} />
+          </Center>
         </MotionBox>
 
         {/* Main Swap Card */}
-        <MotionBox variants={itemVariants}>
+        {
+          fromAsset && toAsset && (
+            <MotionBox variants={itemVariants}>
           <Box
             borderWidth="1px"
             borderColor={borderColor}
@@ -551,7 +673,7 @@ const SwapPage = () => {
                   aria-label="Swap direction"
                   icon={<FiArrowDown />}
                   onClick={handleSwapDirection}
-                  colorScheme="brand"
+                  colorScheme="blue"
                   size="lg"
                   isRound
                   shadow="md"
@@ -577,13 +699,15 @@ const SwapPage = () => {
                 ) : (
                   <HStack>
                     <Text fontSize="sm">
-                      1 {fromAssetInfo?.value} ≈ {exchangeRate.toFixed(6)}{" "}
+                      1 {fromAssetInfo?.value} ≈ {parseFloat(exchangeRate.toFixed(
+                        isFiat(toAsset) ? 2 : 6
+                      )).toLocaleString()}{" "}
                       {toAssetInfo?.value}
                     </Text>
                     <Icon
                       as={FiRefreshCw}
                       cursor="pointer"
-                      onClick={calculateRate}
+                      onClick={() => calculateRate(fromAsset!, toAsset!)}
                       color="brand.500"
                     />
                   </HStack>
@@ -596,7 +720,7 @@ const SwapPage = () => {
                 <Text fontSize="sm" color={secondaryTextColor}>
                   Fee
                 </Text>
-                <Text fontSize="sm">0.5%</Text>
+                <Text fontSize="sm">0%</Text>
               </HStack>
             </Box>
 
@@ -617,6 +741,8 @@ const SwapPage = () => {
             </Button>
           </Box>
         </MotionBox>
+          )
+        }
 
         {/* Review Modal */}
         <Modal
@@ -671,7 +797,7 @@ const SwapPage = () => {
                       <Text fontSize="sm" color={secondaryTextColor}>
                         Network Fee
                       </Text>
-                      <Text fontSize="sm">0.5%</Text>
+                      <Text fontSize="sm">0%</Text>
                     </HStack>
 
                     <HStack justify="space-between">
@@ -688,6 +814,26 @@ const SwapPage = () => {
                     </HStack>
                   </Box>
                 </Box>
+
+                
+                <FormControl isRequired>
+                  <FormLabel>PIN</FormLabel>
+                  <HStack spacing={4}>
+                    <PinInput
+                      otp
+                      size="lg"
+                      value={pin}
+                      onChange={setPin}
+                      focusBorderColor="brand.500"
+                      mask
+                    >
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                    </PinInput>
+                  </HStack>
+                </FormControl>
 
                 <Box
                   p={4}
@@ -718,6 +864,7 @@ const SwapPage = () => {
                 onClick={handleConfirmSwap}
                 isLoading={isLoading}
                 loadingText="Processing"
+                isDisabled={!pin || pin.length < 4}
               >
                 Confirm Swap
               </Button>

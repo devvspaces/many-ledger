@@ -34,6 +34,10 @@ import {
   Center,
   Spinner,
   Image,
+  StackDivider,
+  FormErrorMessage,
+  PinInput,
+  PinInputField,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -46,11 +50,91 @@ import {
   FiEdit,
 } from "react-icons/fi";
 import Link from "next/link";
-import { DashboardResponse, KycStage } from "@/helpers/response";
+import { DashboardResponse, KycStage, Transaction } from "@/helpers/response";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { getDashboard } from "@/store/thunks/ledgerThunk";
+import { getDashboard, sendCrypto } from "@/store/thunks/ledgerThunk";
 import { CRYPTO_CURRENCY, FIAT_CURRENCY } from "@/helpers/constants";
 import { selectUser } from "@/store/features/auth";
+import { copyToClipboard } from "@/helpers/utils";
+import { QRCodeSVG } from "qrcode.react";
+import moment from "moment";
+
+const YoutubeEmbed = ({ videoId }: { videoId: string }) => {
+  const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        paddingBottom: "56.25%",
+        height: 0,
+        overflow: "hidden",
+      }}
+    >
+      <iframe
+        src={embedUrl}
+        title="YouTube video player"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+        }}
+      />
+    </div>
+  );
+};
+
+function QrGenerator({ text }: { text: string }) {
+  return (
+    <Center my={4}>
+      <QRCodeSVG
+        value={text || " "} // Empty fallback to prevent errors
+        size={256}
+        level="H" // Error correction level
+        fgColor="#000000" // QR color
+        bgColor="#ffffff" // Background color
+        marginSize={4}
+      />
+    </Center>
+  );
+}
+
+const buyOptions: {
+  name: string;
+  videoId: string;
+  link: string;
+}[] = [
+  {
+    name: "Moon Pay",
+    videoId: "3OyabwnS4Pg",
+    link: "https://moonpay.com/buy",
+  },
+  {
+    name: "Binance",
+    videoId: "TudHqECFE5Q",
+    link: "https://accounts.binance.com/en/register",
+  },
+  {
+    name: "Trust Wallet",
+    videoId: "ligSpdP9Gdc",
+    link: "https://trustwallet.com/buy-crypto",
+  },
+  {
+    name: "Coin Mama",
+    videoId: "BJfgsOTOzp4",
+    link: "https://coinmama.com",
+  },
+  {
+    name: "Local Bitcoins",
+    videoId: "oto0vXTE8_4",
+    link: "https://localbitcoins.com",
+  },
+];
 
 const CryptoWalletDashboard = () => {
   const {
@@ -78,8 +162,91 @@ const CryptoWalletDashboard = () => {
     null
   );
   const [loading, setLoading] = useState(true);
+  const [selectedReceive, setSelectedReceive] = useState<string>("");
+  const [selectedSend, setSelectedSend] = useState<string>("");
+  const [recipientAddress, setRecipientAddress] = useState<string>("");
+  const [sendAmount, setSendAmount] = useState<number>(0);
+  const [sendPIN, setSendPIN] = useState<string>("");
   const dispatch = useAppDispatch();
   const user = useAppSelector(selectUser)!;
+
+  // Handle transaction pin update
+  const [sending, setSending] = useState(false);
+  const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
+  const handleSendCrypto = () => {
+    const errors: Record<string, string> = {};
+    if (!selectedSend || selectedSend === "") {
+      errors.selectedSend = "Please select a currency to send.";
+    }
+    if (!recipientAddress || recipientAddress === "") {
+      errors.recipientAddress = "Please enter the recipient's address.";
+    }
+    if (sendAmount <= 0) {
+      errors.sendAmount = "Please enter a valid amount to send.";
+    }
+    if (!sendPIN || sendPIN === "") {
+      errors.sendPIN = "Please enter your transaction PIN.";
+    }
+    if (Object.keys(errors).length > 0) {
+      setSendErrors(errors);
+      return;
+    }
+    setSendErrors({});
+    const loadingToast = toast({
+      title: "Sending Crypto",
+      description: "Please wait while we process your transaction...",
+      status: "loading",
+      duration: null,
+      isClosable: false,
+      position: "top",
+    });
+    setSending(true);
+    dispatch(
+      sendCrypto({
+        currency: selectedSend,
+        amount: sendAmount,
+        to_address: recipientAddress,
+        pin: sendPIN,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast({
+          title: "Transaction Successful",
+          description: `Your transaction of ${sendAmount} ${selectedSend} to ${recipientAddress} was successful and is being processed.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        setSendAmount(0);
+        setRecipientAddress("");
+        setSendPIN("");
+        setSelectedSend("");
+        onSendClose();
+      })
+      .catch((err) => {
+        console.log(err);
+        setSendErrors({
+          selectedSend: err.data.currency,
+          recipientAddress: err.data.to_address,
+          sendAmount: err.data.amount,
+          sendPIN: err.data.pin,
+        });
+        toast({
+          title: "Transaction Failed",
+          description: "An error occurred while processing your transaction.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        toast.close(loadingToast);
+        setSending(false);
+      });
+  };
 
   const cryptoAssets = Object.entries(dashboardData?.currency_balance || {})
     .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
@@ -108,55 +275,6 @@ const CryptoWalletDashboard = () => {
       value: dashboardData?.currency_price[currency] || 0,
       icon: FIAT_CURRENCY[currency].icon,
     }));
-
-  // Recent transactions (would normally come from API)
-  const recentTransactions = [
-    {
-      id: 1,
-      type: "receive",
-      asset: "BTC",
-      amount: 0.0125,
-      from: "0x3a2...9f4c",
-      date: "2 hours ago",
-      status: "completed",
-    },
-    {
-      id: 2,
-      type: "send",
-      asset: "ETH",
-      amount: 0.5,
-      to: "0xd82...7bae",
-      date: "5 hours ago",
-      status: "completed",
-    },
-    {
-      id: 3,
-      type: "buy",
-      asset: "SOL",
-      amount: 10.0,
-      paymentMethod: "Credit Card",
-      date: "Yesterday",
-      status: "completed",
-    },
-    {
-      id: 4,
-      type: "convert",
-      fromAsset: "BTC",
-      toAsset: "USDT",
-      amount: 0.005,
-      date: "2 days ago",
-      status: "completed",
-    },
-    {
-      id: 5,
-      type: "withdraw",
-      asset: "USDT",
-      amount: 500,
-      to: "Bank Account",
-      date: "3 days ago",
-      status: "pending",
-    },
-  ];
 
   // KYC status
   const kycStatus: string = user.profile.kyc_stage; // 'pending', 'verified', 'incomplete'
@@ -198,6 +316,116 @@ const CryptoWalletDashboard = () => {
       })
       .finally(() => setLoading(false));
   }, [dispatch, toast]);
+
+  const renderTransactions = (transactions: Transaction[]) => {
+    if (transactions.length === 0) {
+      return (
+        <Text color={mutedTextColor} textAlign="center" py={4}>
+        No transactions to display.
+      </Text>
+      )
+    }
+    return (
+    <VStack spacing={3} align="stretch">
+      {transactions.map((tx, index) => (
+        <MotionBox
+          key={tx.id}
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          custom={index}
+          transition={{ delay: 0.05 * index }}
+          bg={cardBgColor}
+          p={4}
+          borderRadius="xl"
+          boxShadow="sm"
+        >
+          <Flex
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <HStack spacing={3}>
+              <Flex
+                w={10}
+                h={10}
+                borderRadius="full"
+                bg={
+                  tx.meta_type === "receive"
+                    ? "green.100"
+                    : tx.meta_type === "send"
+                    ? "orange.100"
+                    : tx.meta_type === "buy"
+                    ? "blue.100"
+                    : tx.meta_type === "swap"
+                    ? "purple.100"
+                    : "red.100"
+                }
+                color={
+                  tx.meta_type === "receive"
+                    ? "green.500"
+                    : tx.meta_type === "send"
+                    ? "orange.500"
+                    : tx.meta_type === "buy"
+                    ? "blue.500"
+                    : tx.meta_type === "swap"
+                    ? "purple.500"
+                    : "red.500"
+                }
+                justifyContent="center"
+                alignItems="center"
+                fontSize="lg"
+              >
+                {tx.meta_type === "receive" ? (
+                  <FiArrowDown />
+                ) : tx.meta_type === "send" ? (
+                  <FiArrowUp />
+                ) : tx.meta_type === "buy" ? (
+                  <FiDollarSign />
+                ) : tx.meta_type === "swap" ? (
+                  <FiArrowRight />
+                ) : (
+                  <FiArrowUp />
+                )}
+              </Flex>
+              <VStack spacing={0} alignItems="flex-start">
+                <Text
+                  fontWeight="bold"
+                  textTransform="capitalize"
+                >
+                  {tx.meta_type}
+                </Text>
+                <Text fontSize="xs" color={mutedTextColor}>
+                  {moment(tx.created).fromNow()}
+                </Text>
+              </VStack>
+            </HStack>
+
+            <VStack spacing={0} alignItems="flex-end">
+              <Text fontWeight="bold">
+                {tx.tx_type === "credit"
+                  ? "+"
+                  : "-"}
+                {tx.currency_type === "crypto" ? tx.crypto_amount : tx.fiat_amount } {tx.currency}
+              </Text>
+              <Badge
+                colorScheme={
+                  tx.status === "completed"
+                    ? "green"
+                    : tx.status === "pending"
+                    ? "yellow"
+                    : "red"
+                }
+                fontSize="xs"
+              >
+                {tx.status}
+              </Badge>
+            </VStack>
+          </Flex>
+        </MotionBox>
+      ))}
+    </VStack>
+    )
+  }
 
   return (
     <>
@@ -424,16 +652,8 @@ const CryptoWalletDashboard = () => {
             <VStack align="stretch" mt={8} spacing={4}>
               <Flex justifyContent="space-between" alignItems="center">
                 <Heading as="h3" size="md" fontWeight="bold">
-                  Recent Transactions
+                  Your Transactions
                 </Heading>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  rightIcon={<FiArrowRight />}
-                  color={mutedTextColor}
-                >
-                  View All
-                </Button>
               </Flex>
 
               <Tabs variant="soft-rounded" colorScheme="brand" size="sm">
@@ -441,180 +661,29 @@ const CryptoWalletDashboard = () => {
                   <Tab>All</Tab>
                   <Tab>Sent</Tab>
                   <Tab>Received</Tab>
-                  <Tab>Trades</Tab>
+                  <Tab>Buy</Tab>
+                  <Tab>Swap</Tab>
+                  <Tab>Withdraw</Tab>
                 </TabList>
 
                 <TabPanels>
                   <TabPanel px={0}>
-                    <VStack spacing={3} align="stretch">
-                      {recentTransactions.map((tx, index) => (
-                        <MotionBox
-                          key={tx.id}
-                          variants={cardVariants}
-                          initial="hidden"
-                          animate="visible"
-                          custom={index}
-                          transition={{ delay: 0.05 * index }}
-                          bg={cardBgColor}
-                          p={4}
-                          borderRadius="xl"
-                          boxShadow="sm"
-                        >
-                          <Flex
-                            justifyContent="space-between"
-                            alignItems="center"
-                          >
-                            <HStack spacing={3}>
-                              <Flex
-                                w={10}
-                                h={10}
-                                borderRadius="full"
-                                bg={
-                                  tx.type === "receive"
-                                    ? "green.100"
-                                    : tx.type === "send"
-                                    ? "orange.100"
-                                    : tx.type === "buy"
-                                    ? "blue.100"
-                                    : tx.type === "convert"
-                                    ? "purple.100"
-                                    : "red.100"
-                                }
-                                color={
-                                  tx.type === "receive"
-                                    ? "green.500"
-                                    : tx.type === "send"
-                                    ? "orange.500"
-                                    : tx.type === "buy"
-                                    ? "blue.500"
-                                    : tx.type === "convert"
-                                    ? "purple.500"
-                                    : "red.500"
-                                }
-                                justifyContent="center"
-                                alignItems="center"
-                                fontSize="lg"
-                              >
-                                {tx.type === "receive" ? (
-                                  <FiArrowDown />
-                                ) : tx.type === "send" ? (
-                                  <FiArrowUp />
-                                ) : tx.type === "buy" ? (
-                                  <FiDollarSign />
-                                ) : tx.type === "convert" ? (
-                                  <FiArrowRight />
-                                ) : (
-                                  <FiArrowUp />
-                                )}
-                              </Flex>
-                              <VStack spacing={0} alignItems="flex-start">
-                                <Text
-                                  fontWeight="bold"
-                                  textTransform="capitalize"
-                                >
-                                  {tx.type}
-                                </Text>
-                                <Text fontSize="xs" color={mutedTextColor}>
-                                  {tx.date}
-                                </Text>
-                              </VStack>
-                            </HStack>
-
-                            <VStack spacing={0} alignItems="flex-end">
-                              <Text fontWeight="bold">
-                                {tx.type === "receive" || tx.type === "buy"
-                                  ? "+"
-                                  : "-"}
-                                {tx.amount} {tx.asset}
-                              </Text>
-                              <Badge
-                                colorScheme={
-                                  tx.status === "completed"
-                                    ? "green"
-                                    : tx.status === "pending"
-                                    ? "yellow"
-                                    : "red"
-                                }
-                                fontSize="xs"
-                              >
-                                {tx.status}
-                              </Badge>
-                            </VStack>
-                          </Flex>
-                        </MotionBox>
-                      ))}
-                    </VStack>
+                    {renderTransactions(dashboardData.transactions)}
                   </TabPanel>
                   <TabPanel px={0}>
-                    <VStack spacing={3} align="stretch">
-                      {recentTransactions
-                        .filter((tx) => tx.type === "send")
-                        .map((tx, index) => (
-                          <MotionBox
-                            key={index}
-                            variants={cardVariants}
-                            initial="hidden"
-                            animate="visible"
-                            bg={cardBgColor}
-                            p={4}
-                            borderRadius="xl"
-                            boxShadow="sm"
-                          >
-                            <Flex
-                              justifyContent="space-between"
-                              alignItems="center"
-                            >
-                              <HStack spacing={3}>
-                                <Flex
-                                  w={10}
-                                  h={10}
-                                  borderRadius="full"
-                                  bg="orange.100"
-                                  color="orange.500"
-                                  justifyContent="center"
-                                  alignItems="center"
-                                  fontSize="lg"
-                                >
-                                  <FiArrowUp />
-                                </Flex>
-                                <VStack spacing={0} alignItems="flex-start">
-                                  <Text fontWeight="bold">Send</Text>
-                                  <Text fontSize="xs" color={mutedTextColor}>
-                                    {tx.date}
-                                  </Text>
-                                </VStack>
-                              </HStack>
-
-                              <VStack spacing={0} alignItems="flex-end">
-                                <Text fontWeight="bold">
-                                  -{tx.amount} {tx.asset}
-                                </Text>
-                                <Badge
-                                  colorScheme={
-                                    tx.status === "completed"
-                                      ? "green"
-                                      : "yellow"
-                                  }
-                                  fontSize="xs"
-                                >
-                                  {tx.status}
-                                </Badge>
-                              </VStack>
-                            </Flex>
-                          </MotionBox>
-                        ))}
-                    </VStack>
-                  </TabPanel>
-                  {/* Other TabPanels would contain filtered transactions */}
-                  <TabPanel px={0}>
-                    <Text color={mutedTextColor} textAlign="center" py={4}>
-                      Filter functionality would be implemented here
-                    </Text>
+                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "send"))}
                   </TabPanel>
                   <TabPanel px={0}>
-                    <Text color={mutedTextColor} textAlign="center" py={4}>
-                      Filter functionality would be implemented here
-                    </Text>
+                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "receive"))}
+                  </TabPanel>
+                  <TabPanel px={0}>
+                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "buy"))}
+                  </TabPanel>
+                  <TabPanel px={0}>
+                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "swap"))}
+                  </TabPanel>
+                  <TabPanel px={0}>
+                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "withdraw"))}
                   </TabPanel>
                 </TabPanels>
               </Tabs>
@@ -629,9 +698,14 @@ const CryptoWalletDashboard = () => {
               <ModalCloseButton />
               <ModalBody pb={6}>
                 <VStack spacing={4}>
-                  <FormControl>
+                  <FormControl isInvalid={!!sendErrors.selectedSend}>
                     <FormLabel>Select Asset</FormLabel>
-                    <Select placeholder="Select asset">
+                    <Select
+                      placeholder="Select asset"
+                      isRequired
+                      onChange={(e) => setSelectedSend(e.target.value)}
+                      value={selectedSend}
+                    >
                       {cryptoAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
                           {asset.name} ({asset.symbol}) - {asset.balance}{" "}
@@ -639,29 +713,66 @@ const CryptoWalletDashboard = () => {
                         </option>
                       ))}
                     </Select>
+                    <FormErrorMessage>
+                      {sendErrors.selectedSend}
+                    </FormErrorMessage>
                   </FormControl>
 
-                  <FormControl>
+                  <FormControl isInvalid={!!sendErrors.recipientAddress}>
                     <FormLabel>Recipient Address</FormLabel>
-                    <Input placeholder="Enter wallet address" />
+                    <Input
+                      placeholder="Enter wallet address"
+                      isRequired
+                      onChange={(e) => setRecipientAddress(e.target.value)}
+                      value={recipientAddress}
+                    />
+                    <FormErrorMessage>
+                      {sendErrors.recipientAddress}
+                    </FormErrorMessage>
                   </FormControl>
 
-                  <FormControl>
+                  <FormControl isInvalid={!!sendErrors.sendAmount}>
                     <FormLabel>Amount</FormLabel>
-                    <Input placeholder="0.00" type="number" />
+                    <Input
+                      placeholder="0.00"
+                      type="number"
+                      isRequired
+                      onChange={(e) =>
+                        setSendAmount(parseFloat(e.target.value))
+                      }
+                      value={sendAmount}
+                    />
+                    <FormErrorMessage>{sendErrors.sendAmount}</FormErrorMessage>
                   </FormControl>
 
-                  <FormControl>
+                  <FormControl isInvalid={!!sendErrors.sendPIN}>
                     <FormLabel>PIN</FormLabel>
-                    <Input placeholder="Enter your PIN" type="password" />
+                    <HStack spacing={4}>
+                      <PinInput
+                        otp
+                        size="lg"
+                        value={sendPIN}
+                        onChange={setSendPIN}
+                        focusBorderColor="brand.500"
+                        mask
+                      >
+                        <PinInputField borderRadius="lg" />
+                        <PinInputField borderRadius="lg" />
+                        <PinInputField borderRadius="lg" />
+                        <PinInputField borderRadius="lg" />
+                      </PinInput>
+                    </HStack>
+                    <FormErrorMessage>{sendErrors.sendPIN}</FormErrorMessage>
                   </FormControl>
 
                   <Button
-                    colorScheme="brand"
+                    colorScheme="blue"
                     size="lg"
                     width="full"
                     mt={2}
                     leftIcon={<FiLock />}
+                    onClick={handleSendCrypto}
+                    isLoading={sending}
                   >
                     Confirm Send
                   </Button>
@@ -680,7 +791,12 @@ const CryptoWalletDashboard = () => {
                 <VStack spacing={4} align="center">
                   <FormControl>
                     <FormLabel>Select Asset</FormLabel>
-                    <Select placeholder="Select asset">
+                    <Select
+                      onChange={(e) => {
+                        setSelectedReceive(e.target.value);
+                      }}
+                      placeholder="Select asset"
+                    >
                       {cryptoAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
                           {asset.name} ({asset.symbol})
@@ -698,21 +814,44 @@ const CryptoWalletDashboard = () => {
                     textAlign="center"
                   >
                     <Text>QR Code would appear here</Text>
+                    {CRYPTO_CURRENCY[selectedReceive] !== undefined && (
+                      <QrGenerator
+                        text={CRYPTO_CURRENCY[selectedReceive].wallet_address}
+                      />
+                    )}
                     <Text fontSize="xs" mt={4} color={mutedTextColor}>
                       Scan to receive payment
                     </Text>
                   </Box>
 
-                  <FormControl>
-                    <FormLabel>Your Wallet Address</FormLabel>
-                    <Flex>
-                      <Input
-                        value="0x3a4b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b"
-                        isReadOnly
-                      />
-                      <Button ml={2}>Copy</Button>
-                    </Flex>
-                  </FormControl>
+                  {CRYPTO_CURRENCY[selectedReceive] !== undefined && (
+                    <FormControl>
+                      <FormLabel>Your Wallet Address</FormLabel>
+                      <Flex>
+                        <Input
+                          value={
+                            CRYPTO_CURRENCY[selectedReceive].wallet_address
+                          }
+                          isReadOnly
+                        />
+                        <Button
+                          onClick={() => {
+                            copyToClipboard(
+                              CRYPTO_CURRENCY[selectedReceive].wallet_address
+                            );
+                            toast({
+                              title: "Copied to clipboard",
+                              status: "info",
+                              duration: 2000,
+                            });
+                          }}
+                          ml={2}
+                        >
+                          Copy
+                        </Button>
+                      </Flex>
+                    </FormControl>
+                  )}
                 </VStack>
               </ModalBody>
             </ModalContent>
@@ -725,58 +864,30 @@ const CryptoWalletDashboard = () => {
               <ModalHeader>Buy Crypto</ModalHeader>
               <ModalCloseButton />
               <ModalBody pb={6}>
-                <VStack spacing={4}>
-                  <FormControl>
-                    <FormLabel>Select Asset</FormLabel>
-                    <Select placeholder="Select asset to buy">
-                      {cryptoAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.symbol})
-                        </option>
-                      ))}
-                    </Select>
-                  </FormControl>
-
-                  <FormControl>
-                    <FormLabel>Amount</FormLabel>
-                    <Input placeholder="0.00" type="number" />
-                  </FormControl>
-
-                  <FormControl>
-                    <FormLabel>Payment Method</FormLabel>
-                    <Select placeholder="Select payment method">
-                      <option value="creditCard">Credit Card</option>
-                      <option value="bankTransfer">Bank Transfer</option>
-                      <option value="paypal">PayPal</option>
-                    </Select>
-                  </FormControl>
-
-                  <Divider />
-
-                  <HStack width="full" justifyContent="space-between">
-                    <Text>Estimated Price:</Text>
-                    <Text fontWeight="bold">$0.00</Text>
-                  </HStack>
-
-                  <HStack width="full" justifyContent="space-between">
-                    <Text>Fee:</Text>
-                    <Text>$0.00</Text>
-                  </HStack>
-
-                  <HStack width="full" justifyContent="space-between">
-                    <Text fontWeight="bold">Total:</Text>
-                    <Text fontWeight="bold">$0.00</Text>
-                  </HStack>
-
-                  <Button
-                    colorScheme="brand"
-                    size="lg"
-                    width="full"
-                    mt={2}
-                    leftIcon={<FiDollarSign />}
-                  >
-                    Buy Now
-                  </Button>
+                <VStack spacing={8} divider={<StackDivider />}>
+                  {buyOptions.map((option, index) => (
+                    <VStack
+                      key={index}
+                      w={"full"}
+                      spacing={4}
+                      align="stretch"
+                      // bg={secondaryBgColor}
+                      // p={4}
+                      rounded="lg"
+                    >
+                      <Heading size={"md"}>{option.name}</Heading>
+                      <YoutubeEmbed videoId={option.videoId} />
+                      <Button
+                        target="_blank"
+                        as={Link}
+                        href={option.link}
+                        size="sm"
+                        colorScheme="blue"
+                      >
+                        Buy
+                      </Button>
+                    </VStack>
+                  ))}
                 </VStack>
               </ModalBody>
             </ModalContent>
@@ -888,14 +999,14 @@ const CryptoWalletDashboard = () => {
                           </VStack>
                           <Badge
                             colorScheme={
-                              kycStatus === KycStage.IdVerification
-                                ? "yellow"
+                              kycStatus === KycStage.VerificationReview
+                                ? "green"
                                 : "gray"
                             }
                             ml="auto"
                           >
-                            {kycStatus === KycStage.IdVerification
-                              ? "In Progress"
+                            {kycStatus === KycStage.VerificationReview
+                              ? "Completed"
                               : "Not Started"}
                           </Badge>
                         </HStack>
@@ -972,7 +1083,7 @@ const CryptoWalletDashboard = () => {
           </Modal>
         </>
       ) : (
-        <Center hidden={!loading}>
+        <Center hidden={!loading} h={"80vh"}>
           <Spinner size="lg" />
         </Center>
       )}

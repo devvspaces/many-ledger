@@ -57,11 +57,14 @@ import { Profile } from "@/helpers/response";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   changePassword,
+  changePin,
   changeUsername,
   getProfile,
+  setPin,
   updateProfile,
 } from "@/store/thunks/settingsThunk";
-import { selectUser } from "@/store/features/auth";
+import { execLogout, selectUser } from "@/store/features/auth";
+import { useRouter } from "next/navigation";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -96,6 +99,7 @@ const spring = {
 // Settings Page Component
 const SettingsPage = () => {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const user = useAppSelector(selectUser)!;
 
   // State for notification settings
@@ -120,6 +124,8 @@ const SettingsPage = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [transactionPin, setTransactionPin] = useState("");
+  const [oldPin, setOldPin] = useState("");
+  const [newPin, setNewPin] = useState("");
 
   // Fetch account details
   useEffect(() => {
@@ -136,6 +142,7 @@ const SettingsPage = () => {
   const usernameModal = useDisclosure();
   const passwordModal = useDisclosure();
   const pinModal = useDisclosure();
+  const updatePinModal = useDisclosure();
   const twoFAModal = useDisclosure();
   const logoutModal = useDisclosure();
 
@@ -154,7 +161,7 @@ const SettingsPage = () => {
     {}
   );
   const handleProfileUpdate = () => {
-    setProfileErrors({})
+    setProfileErrors({});
     // Simulate loading
     const loadingToast = toast({
       title: "Updating profile",
@@ -319,8 +326,9 @@ const SettingsPage = () => {
       });
   };
 
-  // Handle transaction pin update
-  const handlePinUpdate = () => {
+  // Handle transaction pin set
+  const [settingPin, setSettingPin] = useState(false);
+  const handleSetPin = () => {
     if (transactionPin.length !== 4) {
       toast({
         title: "Invalid PIN",
@@ -335,6 +343,57 @@ const SettingsPage = () => {
 
     // Simulate loading
     const loadingToast = toast({
+      title: "Setting PIN",
+      description: "Please wait while we set your transaction PIN...",
+      status: "loading",
+      duration: null,
+      isClosable: false,
+      position: "top",
+    });
+
+    setSettingPin(true);
+    dispatch(
+      setPin({
+        new_pin: transactionPin,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast.close(loadingToast);
+        toast({
+          title: "PIN setup",
+          description: "Your transaction PIN has been set successfully.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        setTransactionPin("");
+        pinModal.onClose();
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "PIN Setup Error",
+          description:
+            err.data.new_pin[0] || "An error occurred while setting your PIN.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        toast.close(loadingToast);
+        setSettingPin(false);
+      });
+  };
+
+  // Handle transaction pin update
+  const [updatingPin, setUpdatingPin] = useState(false);
+  const handleUpdatePin = () => {
+    // Simulate loading
+    const loadingToast = toast({
       title: "Updating PIN",
       description: "Please wait while we update your transaction PIN...",
       status: "loading",
@@ -343,19 +402,43 @@ const SettingsPage = () => {
       position: "top",
     });
 
-    setTimeout(() => {
-      toast.close(loadingToast);
-      toast({
-        title: "PIN updated",
-        description: "Your transaction PIN has been successfully updated.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
+    setUpdatingPin(true);
+    dispatch(
+      changePin({
+        new_pin: newPin,
+        old_pin: oldPin,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast.close(loadingToast);
+        toast({
+          title: "PIN updated",
+          description: "Your transaction PIN has been successfully updated.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        setTransactionPin("");
+        updatePinModal.onClose();
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "PIN Update Error",
+          description:
+            err.data.old_pin[0] || "An error occurred while updating your PIN.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        toast.close(loadingToast);
+        setUpdatingPin(false);
       });
-      setTransactionPin("");
-      pinModal.onClose();
-    }, 1500);
   };
 
   // Handle 2FA toggle
@@ -528,29 +611,17 @@ const SettingsPage = () => {
 
   // Handle logout
   const handleLogout = () => {
-    // Simulate loading
-    const loadingToast = toast({
-      title: "Logging out",
-      description: "Please wait while we log you out...",
-      status: "loading",
-      duration: null,
-      isClosable: false,
+    dispatch(execLogout())
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out.",
+      status: "success",
+      duration: 3000,
+      isClosable: true,
       position: "top",
     });
-
-    setTimeout(() => {
-      toast.close(loadingToast);
-      toast({
-        title: "Logged out",
-        description: "You have been successfully logged out.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
-      });
-      logoutModal.onClose();
-      // Here you would redirect to login page
-    }, 1500);
+    logoutModal.onClose();
+    router.push("/login");
   };
 
   // Create setting item component
@@ -624,120 +695,134 @@ const SettingsPage = () => {
         </MotionBox>
 
         {/* Profile Section */}
-        <MotionBox variants={itemVariants}>
-          <Flex alignItems="center" mb={4}>
-            <Icon as={FiUser} mr={2} color="brand.500" />
-            <Heading size="md">Profile</Heading>
-          </Flex>
-          <VStack align={"flex-start"} spacing={3}>
-            <SettingItem
-              icon={FiUser}
-              title="View Account ID"
-              description="View your account details and ID"
-              onClick={profileModal.onOpen}
-            />
-            <SettingItem
-              icon={FiMail}
-              title="Update Username"
-              description="Change your registered username"
-              onClick={usernameModal.onOpen}
-            />
-          </VStack>
-        </MotionBox>
+        {accountDetails && (
+          <>
+            <MotionBox variants={itemVariants}>
+              <Flex alignItems="center" mb={4}>
+                <Icon as={FiUser} mr={2} color="brand.500" />
+                <Heading size="md">Profile</Heading>
+              </Flex>
+              <VStack align={"flex-start"} spacing={3}>
+                <SettingItem
+                  icon={FiUser}
+                  title="View Account ID"
+                  description="View your account details and ID"
+                  onClick={profileModal.onOpen}
+                />
+                <SettingItem
+                  icon={FiMail}
+                  title="Update Username"
+                  description="Change your registered username"
+                  onClick={usernameModal.onOpen}
+                />
+              </VStack>
+            </MotionBox>
 
-        {/* Notification Section */}
-        <MotionBox variants={itemVariants}>
-          <Flex alignItems="center" mb={4}>
-            <Icon as={FiBell} mr={2} color="brand.500" />
-            <Heading size="md">Notifications</Heading>
-          </Flex>
-          <VStack align={"flex-start"} spacing={3}>
-            <SettingItem
-              icon={FiShoppingCart}
-              title="Payment Notifications"
-              description="Receive alerts for payments and transactions"
-              rightElement={
-                <Switch
-                  colorScheme="brand"
-                  isChecked={notifications.payments}
-                  onChange={() => handleNotificationToggle("payments")}
+            {/* Notification Section */}
+            <MotionBox variants={itemVariants}>
+              <Flex alignItems="center" mb={4}>
+                <Icon as={FiBell} mr={2} color="brand.500" />
+                <Heading size="md">Notifications</Heading>
+              </Flex>
+              <VStack align={"flex-start"} spacing={3}>
+                <SettingItem
+                  icon={FiShoppingCart}
+                  title="Payment Notifications"
+                  description="Receive alerts for payments and transactions"
+                  rightElement={
+                    <Switch
+                      colorScheme="brand"
+                      isChecked={notifications.payments}
+                      onChange={() => handleNotificationToggle("payments")}
+                    />
+                  }
+                  onClick={() => handleNotificationToggle("payments")}
                 />
-              }
-              onClick={() => handleNotificationToggle("payments")}
-            />
-            <SettingItem
-              icon={FiKey}
-              title="Sign-in Notifications"
-              description="Get notified about new sign-ins to your account"
-              rightElement={
-                <Switch
-                  colorScheme="brand"
-                  isChecked={notifications.signIn}
-                  onChange={() => handleNotificationToggle("signIn")}
+                <SettingItem
+                  icon={FiKey}
+                  title="Sign-in Notifications"
+                  description="Get notified about new sign-ins to your account"
+                  rightElement={
+                    <Switch
+                      colorScheme="brand"
+                      isChecked={notifications.signIn}
+                      onChange={() => handleNotificationToggle("signIn")}
+                    />
+                  }
+                  onClick={() => handleNotificationToggle("signIn")}
                 />
-              }
-              onClick={() => handleNotificationToggle("signIn")}
-            />
-            <SettingItem
-              icon={FiShield}
-              title="Security Notifications"
-              description="Receive alerts about security-related activities"
-              rightElement={
-                <Switch
-                  colorScheme="brand"
-                  isChecked={notifications.security}
-                  onChange={() => handleNotificationToggle("security")}
+                <SettingItem
+                  icon={FiShield}
+                  title="Security Notifications"
+                  description="Receive alerts about security-related activities"
+                  rightElement={
+                    <Switch
+                      colorScheme="brand"
+                      isChecked={notifications.security}
+                      onChange={() => handleNotificationToggle("security")}
+                    />
+                  }
+                  onClick={() => handleNotificationToggle("security")}
                 />
-              }
-              onClick={() => handleNotificationToggle("security")}
-            />
-          </VStack>
-        </MotionBox>
+              </VStack>
+            </MotionBox>
 
-        {/* Security Section */}
-        <MotionBox variants={itemVariants}>
-          <Flex alignItems="center" mb={4}>
-            <Icon as={FiShield} mr={2} color="brand.500" />
-            <Heading size="md">Security</Heading>
-          </Flex>
-          <VStack align={"flex-start"} spacing={3}>
-            <SettingItem
-              icon={FiKey}
-              title="Update Password"
-              description="Change your account password"
-              onClick={passwordModal.onOpen}
-            />
-            <SettingItem
-              icon={FiLock}
-              title="Transaction PIN"
-              description="Set or update your transaction PIN"
-              onClick={pinModal.onOpen}
-            />
-            <SettingItem
-              icon={FiShield}
-              title="Two-Factor Authentication"
-              description={`${
-                twoFactorEnabled ? "Disable" : "Enable"
-              } additional security layer`}
-              rightElement={
-                <Badge
-                  colorScheme={twoFactorEnabled ? "green" : "gray"}
-                  borderRadius="full"
-                  px={2}
-                >
-                  {twoFactorEnabled ? "Enabled" : "Disabled"}
-                </Badge>
-              }
-              onClick={twoFAModal.onOpen}
-            />
-            <SettingItem
-              icon={FiLogOut}
-              title="Logout"
-              description="Sign out from your account"
-              onClick={logoutModal.onOpen}
-            />
-          </VStack>
-        </MotionBox>
+            {/* Security Section */}
+            <MotionBox variants={itemVariants}>
+              <Flex alignItems="center" mb={4}>
+                <Icon as={FiShield} mr={2} color="brand.500" />
+                <Heading size="md">Security</Heading>
+              </Flex>
+              <VStack align={"flex-start"} spacing={3}>
+                <SettingItem
+                  icon={FiKey}
+                  title="Update Password"
+                  description="Change your account password"
+                  onClick={passwordModal.onOpen}
+                />
+                <SettingItem
+                  icon={FiLock}
+                  title="Transaction PIN"
+                  description="Set or update your transaction PIN"
+                  onClick={
+                    accountDetails.has_pin
+                      ? updatePinModal.onOpen
+                      : pinModal.onOpen
+                  }
+                />
+                <SettingItem
+                  icon={FiShield}
+                  title="Two-Factor Authentication"
+                  description={`${
+                    twoFactorEnabled ? "Disable" : "Enable"
+                  } additional security layer`}
+                  rightElement={
+                    <Badge
+                      colorScheme={twoFactorEnabled ? "green" : "gray"}
+                      borderRadius="full"
+                      px={2}
+                    >
+                      {twoFactorEnabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                  }
+                  onClick={twoFAModal.onOpen}
+                />
+                <SettingItem
+                  icon={FiLogOut}
+                  title="Logout"
+                  description="Sign out from your account"
+                  onClick={logoutModal.onOpen}
+                />
+              </VStack>
+            </MotionBox>
+          </>
+        )}
+
+        {!accountDetails && (
+          <Center h={"50vh"}>
+            <Spinner size="lg" />
+          </Center>
+        )}
 
         {/* Profile Modal */}
         <Modal
@@ -1098,11 +1183,104 @@ const SettingsPage = () => {
                 bg="brand.500"
                 color="white"
                 _hover={{ bg: "brand.600" }}
-                onClick={handlePinUpdate}
+                onClick={handleSetPin}
                 leftIcon={<FiLock />}
-                isDisabled={transactionPin.length !== 4}
+                isLoading={settingPin}
+                isDisabled={transactionPin.length !== 4 || settingPin}
               >
                 Set PIN
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Update Transaction PIN Modal */}
+        <Modal
+          isOpen={updatePinModal.isOpen}
+          onClose={updatePinModal.onClose}
+          isCentered
+        >
+          <ModalOverlay backdropFilter="blur(8px)" />
+          <ModalContent borderRadius="xl" bg={bgColor}>
+            <ModalHeader>Update Transaction PIN</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody pb={6}>
+              <VStack spacing={10}>
+                <Text>
+                  Update your 4-digit PIN to authorize your transactions. This
+                  adds an extra layer of security to your account.
+                </Text>
+
+                <VStack spacing={4}>
+                  <Text fontWeight="medium">Enter Current 4-Digit PIN</Text>
+                  <HStack spacing={4} justify="center">
+                    <PinInput
+                      otp
+                      size="lg"
+                      value={oldPin}
+                      onChange={setOldPin}
+                      focusBorderColor="brand.500"
+                      mask
+                    >
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                    </PinInput>
+                  </HStack>
+                </VStack>
+
+                <VStack spacing={4}>
+                  <Text fontWeight="medium">Enter New 4-Digit PIN</Text>
+                  <HStack spacing={4} justify="center">
+                    <PinInput
+                      otp
+                      size="lg"
+                      value={newPin}
+                      onChange={setNewPin}
+                      focusBorderColor="brand.500"
+                      mask
+                    >
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                      <PinInputField borderRadius="lg" />
+                    </PinInput>
+                  </HStack>
+                </VStack>
+
+                <Box
+                  bg="brand.50"
+                  p={4}
+                  borderRadius="md"
+                  borderLeft="4px solid"
+                  borderLeftColor="brand.500"
+                  width="full"
+                >
+                  <Text fontSize="sm" color="gray.700">
+                    Never share your PIN with anyone. We will never ask for your
+                    PIN outside of the transaction process.
+                  </Text>
+                </Box>
+              </VStack>
+            </ModalBody>
+
+            <ModalFooter>
+              <Button variant="ghost" mr={3} onClick={updatePinModal.onClose}>
+                Cancel
+              </Button>
+              <Button
+                bg="brand.500"
+                color="white"
+                _hover={{ bg: "brand.600" }}
+                onClick={handleUpdatePin}
+                leftIcon={<FiLock />}
+                isLoading={updatingPin}
+                isDisabled={
+                  newPin.length !== 4 || oldPin.length !== 4 || updatingPin
+                }
+              >
+                Update PIN
               </Button>
             </ModalFooter>
           </ModalContent>

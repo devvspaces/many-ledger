@@ -172,6 +172,8 @@ export interface Profile {
   // Settings preferences
   dark_mode: boolean;
   two_factor: boolean;
+
+  has_pin: boolean;
 }
 
 export enum NotificationStatus {
@@ -206,6 +208,7 @@ export type SendCryptoResponse = Transaction;
 export interface BalancesResponse {
   currency_balance: Record<string, number>;
   currency_price: Record<string, number>;
+  crypto_rates: Record<string, Record<string, string | number>>;
 }
 
 // SwapCryptoView, WithdrawFiatView, and ConnectWalletView all return a simple message:

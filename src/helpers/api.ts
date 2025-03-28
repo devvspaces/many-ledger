@@ -9,6 +9,12 @@ const API = axios.create({
   },
 });
 
+const exclude_auth_paths = [
+  "/account/login/",
+  "/account/register/",
+  "/account/token/refresh/",
+];
+
 let isRefreshing = false;
 
 const refreshAuthToken = async () => {
@@ -20,12 +26,12 @@ const refreshAuthToken = async () => {
       const response = await API.post("/account/token/refresh/", {
         refresh,
       });
-      const newToken = response.data.access;
+      const newToken = response.data.data.access;
       localStorage.setItem(
         AUTH_TOKENS_KEY,
         JSON.stringify({
           ...jTokens,
-          ...response.data,
+          access: newToken,
         })
       );
       return newToken;
@@ -35,16 +41,16 @@ const refreshAuthToken = async () => {
 };
 
 const handleLogout = () => {
-  // Clear tokens from localStorage
   localStorage.removeItem("tokens");
   localStorage.removeItem("user");
-
-  // Redirect to login page
-  // Adjust the path as needed for your routing
   window.location.href = "/login";
 };
 
 API.interceptors.request.use((req) => {
+  if (exclude_auth_paths.includes(req.url!)) {
+    return req
+  }
+
   if (localStorage.getItem("tokens")) {
     const tokens = localStorage.getItem("tokens");
     if (tokens) {

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Flex,
@@ -10,55 +10,51 @@ import {
   HStack,
   useColorModeValue,
   Avatar,
+  useToast,
+  Center,
+  Spinner,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { FiBell } from "react-icons/fi";
+import { Notification } from "@/helpers/response";
+import { useAppDispatch } from "@/store/hooks";
+import { getNotifications } from "@/store/thunks/notificationsThunk";
+import moment from "moment";
 
 // Motion Components
 const MotionBox = motion(Box);
 const MotionVStack = motion(VStack);
-
-// Notification Data
-const notifications = [
-  {
-    id: 1,
-    type: "success",
-    title: "Transaction Completed",
-    description: "Your transfer of 0.5 ETH to 0x3a2...9f4c was successful.",
-    timestamp: "2 hours ago",
-    read: false,
-  },
-  {
-    id: 2,
-    type: "warning",
-    title: "Low Balance Alert",
-    description: "Your BTC balance is below the recommended threshold.",
-    timestamp: "5 hours ago",
-    read: true,
-  },
-  {
-    id: 3,
-    type: "info",
-    title: "New Feature Available",
-    description: "Check out the new wallet connect feature in your dashboard.",
-    timestamp: "Yesterday",
-    read: true,
-  },
-  {
-    id: 4,
-    type: "error",
-    title: "Failed Transaction",
-    description: "Your transfer of 10 SOL failed due to insufficient gas fees.",
-    timestamp: "2 days ago",
-    read: false,
-  },
-];
 
 // Main Component
 const NotificationsPage = () => {
   // Dynamic colors based on theme
   const cardBgColor = useColorModeValue("gray.50", "gray.700");
   const mutedTextColor = useColorModeValue("gray.600", "gray.400");
+
+  const dispatch = useAppDispatch();
+  const toast = useToast();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    dispatch(getNotifications())
+      .unwrap()
+      .then((data) => {
+        setNotifications(data);
+      })
+      .catch((error) => {
+        console.error(error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch notifications.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [dispatch, toast]);
 
   // Animation variants
   const cardVariants = {
@@ -90,7 +86,7 @@ const NotificationsPage = () => {
             Notifications
           </Heading>
           <Text color="gray.500" fontSize="sm">
-            You have {notifications.length} new notifications.
+            You have {notifications.length} notifications.
           </Text>
         </MotionBox>
         {notifications.map((notification, index) => (
@@ -105,11 +101,11 @@ const NotificationsPage = () => {
             boxShadow="sm"
             borderLeft="4px solid"
             borderLeftColor={
-              notification.type === "success"
+              notification.status === "success"
                 ? "green.500"
-                : notification.type === "warning"
+                : notification.status === "warning"
                 ? "yellow.500"
-                : notification.type === "info"
+                : notification.status === "info"
                 ? "blue.500"
                 : "red.500"
             }
@@ -120,20 +116,20 @@ const NotificationsPage = () => {
                   size="sm"
                   icon={<FiBell />}
                   bg={
-                    notification.type === "success"
+                    notification.status === "success"
                       ? "green.100"
-                      : notification.type === "warning"
+                      : notification.status === "warning"
                       ? "yellow.100"
-                      : notification.type === "info"
+                      : notification.status === "info"
                       ? "blue.100"
                       : "red.100"
                   }
                   color={
-                    notification.type === "success"
+                    notification.status === "success"
                       ? "green.500"
-                      : notification.type === "warning"
+                      : notification.status === "warning"
                       ? "yellow.500"
-                      : notification.type === "info"
+                      : notification.status === "info"
                       ? "blue.500"
                       : "red.500"
                   }
@@ -141,16 +137,33 @@ const NotificationsPage = () => {
                 <VStack spacing={1} align="flex-start">
                   <Text fontWeight="bold">{notification.title}</Text>
                   <Text fontSize="sm" color={mutedTextColor}>
-                    {notification.description}
+                    {notification.message}
                   </Text>
                   <Text fontSize="xs" color={mutedTextColor}>
-                    {notification.timestamp}
+                    {moment(notification.created).fromNow()}
                   </Text>
                 </VStack>
               </HStack>
             </Flex>
           </MotionBox>
         ))}
+        {loading && (
+          <Center h={"50vh"}>
+            <Spinner size={"lg"} />
+          </Center>
+        )}
+        {!loading && notifications.length === 0 && (
+          <MotionBox
+            variants={itemVariants}
+            textAlign="center"
+            p={4}
+            borderRadius="xl"
+            boxShadow="sm"
+            bg={cardBgColor}
+          >
+            <Text>No new notifications.</Text>
+          </MotionBox>
+        )}
       </MotionVStack>
     </Box>
   );

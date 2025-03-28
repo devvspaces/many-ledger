@@ -19,12 +19,16 @@ import {
   useToast,
   Card,
   CardBody,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
   FiUpload,
   FiCheck,
 } from "react-icons/fi";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { getUser, updateKyc } from "@/store/thunks/settingsThunk";
+import { selectUser, setUser } from "@/store/features/auth";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -304,11 +308,13 @@ const itemVariants = {
 
 // KYC Verification Page Component
 const KYCVerificationPage = () => {
+  const dispatch = useAppDispatch();
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedIdType, setSelectedIdType] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [idPhoto, setIdPhoto] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const user = useAppSelector(selectUser)!;
 
   const toast = useToast();
 
@@ -333,7 +339,9 @@ const KYCVerificationPage = () => {
     }
   };
 
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const handleSubmit = () => {
+    setFormErrors({});
     if (!selectedCountry || !selectedIdType || !idNumber || !idPhoto) {
       toast({
         title: "Missing information",
@@ -345,22 +353,46 @@ const KYCVerificationPage = () => {
       });
       return;
     }
-
+    const formData = new FormData();
+    formData.append("issuing_country", selectedCountry);
+    formData.append("identity_medium", selectedIdType);
+    formData.append("identity_number", idNumber);
+    formData.append("identity_photo", idPhoto);
     setIsProcessing(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsProcessing(false);
-      toast({
-        title: "Verification Submitted",
-        description:
-          "Your verification request has been submitted successfully.",
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-        position: "top",
+    dispatch(updateKyc(formData))
+      .unwrap()
+      .then(() => {
+        toast({
+          title: "Verification Submitted",
+          description:
+            "Your verification request has been submitted successfully.",
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+        dispatch(getUser()).unwrap().then((data) => {
+          dispatch(setUser({
+            ...user,
+            ...data,
+          }))
+        });
+      })
+      .catch((err) => {
+        console.log(err)
+        setFormErrors(err.data);
+        toast({
+          title: "Verification Failed",
+          description: "An error occurred while submitting your verification",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setIsProcessing(false);
       });
-    }, 3000);
   };
 
 
@@ -425,7 +457,7 @@ const KYCVerificationPage = () => {
         {/* Form Section */}
         <MotionBox variants={itemVariants} as={VStack} gap={6}>
           {/* Country Selection */}
-          <FormControl isRequired>
+          <FormControl isRequired isInvalid={!!formErrors.issuing_country}>
             <FormLabel fontWeight="medium">Issuing Country</FormLabel>
             <Select
               placeholder="Select a Country"
@@ -445,10 +477,13 @@ const KYCVerificationPage = () => {
               }
               {/* More countries would be added here */}
             </Select>
+            <FormErrorMessage>
+              {formErrors.issuing_country}
+            </FormErrorMessage>
           </FormControl>
 
           {/* ID Type Selection */}
-          <FormControl isRequired>
+          <FormControl isRequired isInvalid={!!formErrors.identity_medium}>
             <FormLabel fontWeight="medium">Identity Medium</FormLabel>
             <Select
               placeholder="Select an Identity Medium"
@@ -458,14 +493,17 @@ const KYCVerificationPage = () => {
               onChange={(e) => setSelectedIdType(e.target.value)}
               focusBorderColor="brand.500"
             >
-              <option value="drivers-license">Driver&apos;s License</option>
+              <option value="driver_license">Driver&apos;s License</option>
               <option value="passport">International Passport</option>
-              <option value="national-id">National ID card</option>
+              <option value="national_id">National ID card</option>
             </Select>
+            <FormErrorMessage>
+              {formErrors.identity_medium}
+            </FormErrorMessage>
           </FormControl>
 
           {/* ID Number */}
-          <FormControl isRequired>
+          <FormControl isRequired isInvalid={!!formErrors.identity_number}>
             <FormLabel fontWeight="medium">Identity Number</FormLabel>
             <Input
               placeholder="Enter your ID number"
@@ -475,10 +513,13 @@ const KYCVerificationPage = () => {
               onChange={(e) => setIdNumber(e.target.value)}
               focusBorderColor="brand.500"
             />
+            <FormErrorMessage>
+              {formErrors.identity_number}
+            </FormErrorMessage>
           </FormControl>
 
           {/* ID Photo Upload */}
-          <FormControl isRequired>
+          <FormControl isRequired isInvalid={!!formErrors.identity_photo}>
             <FormLabel fontWeight="medium">Identity Card Photo</FormLabel>
             <MotionBox
               as="label"
@@ -517,6 +558,9 @@ const KYCVerificationPage = () => {
                 quality
               </Text>
             </MotionBox>
+            <FormErrorMessage>
+              {formErrors.identity_photo}
+            </FormErrorMessage>
           </FormControl>
         </MotionBox>
 

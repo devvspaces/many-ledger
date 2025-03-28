@@ -41,7 +41,6 @@ function Layout({
   const navRoute = {
     home: "/dashboard",
     activity: "/dashboard/notifications",
-    settings: "/dashboard/settings",
     connect: "/dashboard/wallet-connect",
     swap: "/dashboard/swap",
     withdraw: "/dashboard/withdraw",
@@ -60,7 +59,7 @@ function Layout({
   const { colorMode, toggleColorMode } = useColorMode();
 
   // Notification count
-  const notificationCount = 3;
+  const notificationCount = 0;
 
   // KYC status
   const kycStatus: string = user.profile.kyc_stage; // 'pending', 'verified', 'incomplete'
@@ -93,15 +92,26 @@ function Layout({
           justifyContent="space-between"
         >
           <HStack spacing={2}>
-            <Avatar size="sm" name={user.username} bg="brand.500" />
+            <Avatar size="sm" name={user.username} />
             <VStack spacing={0} alignItems="flex-start">
               <Text fontWeight="bold" fontSize="md">
-                Welcome, {user.username}
+                Welcome,{" "}
+                <span
+                  style={{
+                    textTransform: "capitalize"
+                  }}
+                >
+                  {user.username}
+                </span>
               </Text>
               <Badge
-                colorScheme={kycStatus === KycStage.Verified ? "green" : "yellow"}
+                colorScheme={
+                  kycStatus === KycStage.Verified ? "green" : "yellow"
+                }
               >
-                {kycStatus === KycStage.Verified ? "Verified" : "Verification Pending"}
+                {kycStatus === KycStage.Verified
+                  ? "Verified"
+                  : "Verification Pending"}
               </Badge>
             </VStack>
           </HStack>
@@ -136,7 +146,7 @@ function Layout({
             <IconButton
               aria-label="Settings"
               icon={<FiSettings />}
-              onClick={() => router.push(navRoute.settings)}
+              onClick={() => router.push("/dashboard/settings")}
               variant="ghost"
               fontSize="xl"
             />
@@ -203,16 +213,12 @@ function Layout({
             <Icon
               as={FiRefreshCw}
               fontSize="xl"
-              color={
-                activeNavItem === "swap" ? primaryColor : mutedTextColor
-              }
+              color={activeNavItem === "swap" ? primaryColor : mutedTextColor}
             />
             <Text
               fontSize="xs"
               fontWeight={activeNavItem === "swap" ? "bold" : "normal"}
-              color={
-                activeNavItem === "swap" ? primaryColor : mutedTextColor
-              }
+              color={activeNavItem === "swap" ? primaryColor : mutedTextColor}
             >
               Swap
             </Text>
@@ -239,30 +245,6 @@ function Layout({
               }
             >
               Withdraw
-            </Text>
-          </VStack>
-
-          <VStack
-            spacing={1}
-            opacity={activeNavItem === "settings" ? 1 : 0.7}
-            onClick={() => handleNavChange("settings")}
-            cursor="pointer"
-          >
-            <Icon
-              as={FiSettings}
-              fontSize="xl"
-              color={
-                activeNavItem === "settings" ? primaryColor : mutedTextColor
-              }
-            />
-            <Text
-              fontSize="xs"
-              fontWeight={activeNavItem === "settings" ? "bold" : "normal"}
-              color={
-                activeNavItem === "settings" ? primaryColor : mutedTextColor
-              }
-            >
-              Settings
             </Text>
           </VStack>
 

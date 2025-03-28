@@ -21,31 +21,39 @@ export const CRYPTO_CURRENCY: Record<
   {
     name: string;
     logo: string;
+    wallet_address: string;
   }
 > = {
   BTC: {
     name: "Bitcoin",
     logo: "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
+    wallet_address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
   },
   ETH: {
     name: "Ethereum",
     logo: "https://cryptologos.cc/logos/ethereum-eth-logo.png",
+    wallet_address: "0xeBec795c9c8bBD61FFc14A6662944748F299cAcf",
   },
   BNB: {
     name: "Binance Coin",
     logo: "https://cryptologos.cc/logos/binance-coin-bnb-logo.png",
+    wallet_address: "0xBA401CdaC1A3b6AEeDe21c9C4a483be6C29F88C5",
   },
   SOL: {
     name: "Solana",
     logo: "https://cryptologos.cc/logos/solana-sol-logo.png",
+    wallet_address:
+      "2SJx8HzqAy9qp66Yyw94AQgyvK6NFVsAWDpnHEQmCHAtdKJC8q6eUsFkBeTfYv2aw9yp85bdoEnnpRchVcxWnkmF",
   },
   USDT: {
     name: "Tether",
     logo: "https://cryptologos.cc/logos/tether-usdt-logo.png",
+    wallet_address: "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97",
   },
   USDC: {
     name: "USD Coin",
     logo: "https://cryptologos.cc/logos/usd-coin-usdc-logo.png",
+    wallet_address: "0x2bf916f8169Ed2a77324d3E168284FC252aE4087",
   },
 };
 

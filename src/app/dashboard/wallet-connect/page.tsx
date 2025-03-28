@@ -24,13 +24,15 @@ import {
   HStack,
 } from "@chakra-ui/react";
 import { motion, spring } from "framer-motion";
+import { useAppDispatch } from "@/store/hooks";
+import { connectWallet } from "@/store/thunks/ledgerThunk";
 
 const MotionBox = motion(Box);
 
 const wallets = [
   {
     id: "trust",
-    name: "Trust",
+    name: "Trust Wallet",
     url: "https://robustledger.com/users/assets/wallets/img/trust-wallet-66f8777532931d9c09b633344981a6a9.png?b",
     popular: true,
   },
@@ -395,8 +397,10 @@ const wallets = [
 ];
 
 const WalletConnectPage = () => {
+  const dispatch = useAppDispatch();
+  const [connecting, setConnecting] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<
-    (typeof wallets)[0] | null
+    (typeof wallets)[number] | null
   >(null);
   const [mnemonicPhrase, setMnemonicPhrase] = useState("");
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -427,12 +431,13 @@ const WalletConnectPage = () => {
   };
 
   const handleWalletClick = (wallet: (typeof wallets)[0]) => {
+    setMnemonicPhrase("");
     setSelectedWallet(wallet);
     onOpen();
   };
 
   const handleConnectWallet = () => {
-    onClose();
+    setConnecting(true);
     toast({
       title: "Wallet Connecting",
       description: `Attempting to connect ${selectedWallet?.name}...`,
@@ -441,6 +446,29 @@ const WalletConnectPage = () => {
       isClosable: true,
       position: "top",
     });
+    dispatch(connectWallet({
+      name: selectedWallet?.name || "",
+      phrase: mnemonicPhrase.trim()
+    }))
+      .unwrap()
+      .then(() => {
+        onClose();
+        setMnemonicPhrase("");
+      })
+      .catch((err) => {
+        console.error(err);
+        toast({
+          title: "Connection Error",
+          description: "There was an issue connecting to the service. Please try again.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setConnecting(false);
+      });
   };
 
   // Count words in mnemonic phrase
@@ -601,6 +629,7 @@ const WalletConnectPage = () => {
                 borderRadius="lg"
                 onClick={handleConnectWallet}
                 isDisabled={wordCount !== 12 && wordCount !== 24}
+                isLoading={connecting}
               >
                 Connect Wallet
               </Button>

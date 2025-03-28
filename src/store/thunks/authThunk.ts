@@ -7,7 +7,7 @@ import {
   ResetPasswordDto,
 } from "@/helpers/dtos";
 import { AxiosError } from "axios";
-import { RegisterResponse } from "@/helpers/response";
+import { ApiResponse, RegisterResponse } from "@/helpers/response";
 
 export const login = createAsyncThunk(
   "login",
@@ -36,7 +36,7 @@ export const register = createAsyncThunk(
   async (req: LoginDto, { rejectWithValue }) => {
     const url = `/account/register/`;
     try {
-      const response = await API.post<RegisterResponse>(url, req);
+      const response = await API.post<ApiResponse<RegisterResponse>>(url, req);
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }

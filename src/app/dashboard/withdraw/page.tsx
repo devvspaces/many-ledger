@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   VStack,
@@ -50,6 +50,11 @@ import {
   AccordionButton,
   AccordionIcon,
   AccordionPanel,
+  Center,
+  Spinner,
+  FormErrorMessage,
+  PinInputField,
+  PinInput,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -61,6 +66,13 @@ import {
   FiHelpCircle,
   FiLock,
 } from "react-icons/fi";
+import { useAppDispatch } from "@/store/hooks";
+import {
+  getFiatBalances,
+  getSavedBankAccount,
+  withdrawFiat,
+} from "@/store/thunks/ledgerThunk";
+import { FIAT_CURRENCY } from "@/helpers/constants";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -92,13 +104,6 @@ const spring = {
   damping: 20,
 };
 
-// Sample fiat balances
-const fiatBalances = [
-  { currency: "USD", amount: 1250.75, symbol: "$" },
-  { currency: "EUR", amount: 860.2, symbol: "€" },
-  { currency: "GBP", amount: 542.35, symbol: "£" },
-];
-
 // Withdrawal steps
 const steps = [
   { title: "Request", description: "Withdraw request submission" },
@@ -109,21 +114,31 @@ const steps = [
 
 // Bank types
 const bankTypes = [
-  { value: "ach", label: "ACH Transfer (US)" },
-  { value: "wire", label: "Wire Transfer" },
-  { value: "sepa", label: "SEPA Transfer (EU)" },
-  { value: "swift", label: "SWIFT Transfer" },
+  { value: "ACH", label: "ACH Transfer (US)" },
+  { value: "WIRE", label: "Wire Transfer" },
+  { value: "SEPA", label: "SEPA Transfer (EU)" },
+  { value: "SWIFT", label: "SWIFT Transfer" },
 ];
 
-type BankType = "ach" | "wire" | "sepa" | "swift";
+type BankType = "ACH" | "WIRE" | "SEPA" | "SWIFT";
 
 const WithdrawalPage = () => {
+  const dispatch = useAppDispatch();
+  const toast = useToast();
   // State for form data
   const [activeCurrency, setActiveCurrency] = useState("USD");
   const [activeStep, setActiveStep] = useState(0);
-  const [withdrawalAmount, setWithdrawalAmount] = useState("500");
-  const [bankType, setBankType] = useState<BankType>("ach");
-  const [saveDetails, setSaveDetails] = useState(true);
+  const [withdrawalAmount, setWithdrawalAmount] = useState("0");
+  const [bankType, setBankType] = useState<BankType>("ACH");
+  const [saveDetails, setSaveDetails] = useState(false);
+  const [fiatBalances, setFiatBalances] = useState<
+    {
+      currency: string;
+      symbol: string;
+      amount: number;
+    }[]
+  >([]);
+  const [loadingFiatBalance, setLoadingFiatBalance] = useState(false);
   const [formData, setFormData] = useState({
     accountHolder: "",
     bankName: "",
@@ -132,10 +147,60 @@ const WithdrawalPage = () => {
     swiftCode: "",
     ibanNumber: "",
     bankAddress: "",
-    bankCountry: "United States",
     reference: "",
+    pin: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    // Load fiat balances
+    setLoadingFiatBalance(true);
+    dispatch(getFiatBalances())
+      .unwrap()
+      .then((data) => {
+        const balances = Object.entries(data.data.currency_balance).map(
+          ([currency, amount]) => {
+            return {
+              currency,
+              symbol: FIAT_CURRENCY[currency].icon,
+              amount: amount,
+            };
+          }
+        );
+        setFiatBalances(balances);
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "Error",
+          description: "Failed to load fiat balances",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => setLoadingFiatBalance(false));
+
+    dispatch(getSavedBankAccount())
+      .unwrap()
+      .then((data) => {
+        const bankAccount = data.data;
+        setFormData((prev) => ({
+          ...prev,
+          accountHolder: bankAccount.account_name ?? prev.accountHolder,
+          bankName: bankAccount.bank_name ?? prev.bankName,
+          accountNumber: bankAccount.account_number ?? prev.accountNumber,
+          routingNumber: bankAccount.routing_number ?? prev.routingNumber,
+          swiftCode: bankAccount.swift_code ?? prev.swiftCode,
+          ibanNumber: bankAccount.iban ?? prev.ibanNumber,
+          bankAddress: bankAccount.bank_address ?? prev.bankAddress,
+        }));
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }, [dispatch, toast]);
 
   // Get the currently selected currency details
   const currentCurrency = fiatBalances.find(
@@ -149,8 +214,6 @@ const WithdrawalPage = () => {
     index: activeStep,
     count: steps.length,
   });
-
-  const toast = useToast();
 
   // Color mode values
   const bgColor = useColorModeValue("white", "gray.800");
@@ -174,62 +237,44 @@ const WithdrawalPage = () => {
   };
 
   // Handle withdrawal request submit
+  const [withdrawErrors, setWithdrawErrors] = useState<Record<string, string>>(
+    {}
+  );
   const handleSubmit = () => {
     // Validate the form
+    const errors: Record<string, string> = {};
     const requiredFields = getBankFields(bankType).filter(
       (field) => field.required
     );
     const missingFields = requiredFields.filter(
-      (field) => !formData[field.name as keyof typeof formData] || formData[field.name as keyof typeof formData].trim() === ""
+      (field) =>
+        !formData[field.name as keyof typeof formData] ||
+        formData[field.name as keyof typeof formData].trim() === ""
     );
 
-    if (missingFields.length > 0) {
-      toast({
-        title: "Missing information",
-        description: `Please fill in all required fields: ${missingFields
-          .map((f) => f.label)
-          .join(", ")}`,
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-        position: "top",
-      });
-      return;
-    }
-
+    missingFields.forEach((field) => {
+      errors[field.name] = `${field.label} is required`;
+    });
     if (parseFloat(withdrawalAmount) <= 0) {
-      toast({
-        title: "Invalid amount",
-        description: "Please enter a valid withdrawal amount",
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
-      });
-      return;
+      errors.amount = "Please enter a valid withdrawal amount";
     }
-
+    if (!formData.pin || formData.pin.length < 4) {
+      errors.pin = "Please enter a valid 4-digit PIN";
+    }
     if (!currentCurrency) {
-      toast({
-        title: "Currency not found",
-        description: "Please select a valid currency to withdraw",
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
-      });
+      errors.currency = "Please select a valid currency to withdraw";
       return;
     }
+    if (
+      !errors.amount &&
+      !errors.currency &&
+      parseFloat(withdrawalAmount) > currentCurrency.amount
+    ) {
+      errors.amount = `Your ${currentCurrency.currency} balance is not enough for this withdrawal`;
+    }
 
-    if (parseFloat(withdrawalAmount) > currentCurrency.amount) {
-      toast({
-        title: "Insufficient balance",
-        description: `Your ${currentCurrency.currency} balance is not enough for this withdrawal`,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
-      });
+    setWithdrawErrors(errors);
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
@@ -239,56 +284,98 @@ const WithdrawalPage = () => {
 
   // Handle withdrawal confirmation
   const handleConfirmWithdrawal = () => {
+    setWithdrawErrors({});
     setIsLoading(true);
+    dispatch(
+      withdrawFiat({
+        amount: parseFloat(withdrawalAmount),
+        currency: activeCurrency,
+        withdrawal_type: bankType,
+        account_name: formData.accountHolder,
+        bank_name: formData.bankName,
+        account_number: formData.accountNumber,
+        routing_number: formData.routingNumber,
+        swift_code: formData.swiftCode,
+        iban: formData.ibanNumber,
+        reference: formData.reference,
+        bank_address: formData.bankAddress,
+        save_details: saveDetails,
+        pin: formData.pin,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        successModal.onOpen();
 
-    // Simulate processing (API call would go here)
-    setTimeout(() => {
-      setIsLoading(false);
-      confirmModal.onClose();
+        // Reset form
+        setWithdrawalAmount("0");
+        setActiveStep(1); // Move to verification step
 
-      // Show success modal
-      successModal.onOpen();
-
-      // Reset form
-      setWithdrawalAmount("0");
-      setActiveStep(1); // Move to verification step
-
-      toast({
-        title: "Withdrawal requested",
-        description: `Your ${
-          currentCurrency!.symbol
-        }${withdrawalAmount} withdrawal request has been submitted successfully.`,
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-        position: "top",
+        toast({
+          title: "Withdrawal requested",
+          description: `Your ${
+            currentCurrency!.symbol
+          }${withdrawalAmount} withdrawal request has been submitted successfully.`,
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .catch((err) => {
+        console.log(err);
+        setWithdrawErrors({
+          amount: err.data.amount,
+          currency: err.data.currency,
+          withdrawal_type: err.data.withdrawal_type,
+          accountHolder: err.data.account_name,
+          bankName: err.data.bank_name,
+          accountNumber: err.data.account_number,
+          routingNumber: err.data.routing_number,
+          swiftCode: err.data.swift_code,
+          ibanNumber: err.data.iban,
+          reference: err.data.reference,
+          bankAddress: err.data.bank_address,
+          pin: err.data.pin,
+        });
+        toast({
+          title: "Transaction Failed",
+          description: "An error occurred while processing your transaction.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        confirmModal.onClose();
+        setIsLoading(false);
       });
-    }, 2000);
   };
 
   // Get the required fields based on bank type
-  const getBankFields = (type: "ach" | "wire" | "sepa" | "swift") => {
+  const getBankFields = (type: BankType) => {
     const baseFields = [
       { name: "accountHolder", label: "Account Holder Name", required: true },
       { name: "bankName", label: "Bank Name", required: true },
     ];
 
     const specificFields = {
-      ach: [
+      ACH: [
         { name: "accountNumber", label: "Account Number", required: true },
         { name: "routingNumber", label: "Routing Number", required: true },
       ],
-      wire: [
+      WIRE: [
         { name: "accountNumber", label: "Account Number", required: true },
         { name: "routingNumber", label: "Routing Number", required: true },
         { name: "swiftCode", label: "SWIFT Code", required: true },
         { name: "bankAddress", label: "Bank Address", required: true },
       ],
-      sepa: [
+      SEPA: [
         { name: "ibanNumber", label: "IBAN Number", required: true },
         { name: "swiftCode", label: "BIC/SWIFT Code", required: true },
       ],
-      swift: [
+      SWIFT: [
         { name: "accountNumber", label: "Account Number", required: true },
         { name: "swiftCode", label: "SWIFT Code", required: true },
         { name: "bankAddress", label: "Bank Address", required: true },
@@ -300,7 +387,8 @@ const WithdrawalPage = () => {
 
   // Calculate fees (example: 1% fee with $5 minimum)
   const calculateFee = (amount: string) => {
-    const fee = Math.max(parseFloat(amount) * 0.01, 5);
+    if (amount === "") return "0.00";
+    const fee = Math.max(parseFloat(amount) * 0, 0);
     return fee.toFixed(2);
   };
 
@@ -336,54 +424,68 @@ const WithdrawalPage = () => {
           <Text fontWeight="medium" mb={3}>
             Available Balances
           </Text>
-          <HStack spacing={4} overflowX="auto" pb={2} w="100%">
-            {fiatBalances.map((balance) => (
-              <MotionBox
-                key={balance.currency}
-                borderWidth="1px"
-                borderColor={
-                  activeCurrency === balance.currency
-                    ? "brand.500"
-                    : borderColor
-                }
-                borderRadius="xl"
-                p={4}
-                cursor="pointer"
-                onClick={() => setActiveCurrency(balance.currency)}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                transition={spring}
-                bg={
-                  activeCurrency === balance.currency
-                    ? highlightBgColor
-                    : cardBgColor
-                }
-                minW="180px"
-                boxShadow={activeCurrency === balance.currency ? "md" : "none"}
-              >
-                <HStack spacing={3}>
-                  <Flex
-                    p={2}
-                    borderRadius="lg"
-                    bg={iconBgColor}
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <Icon as={FiDollarSign} boxSize={5} color="brand.500" />
-                  </Flex>
-                  <Box>
-                    <Text fontSize="sm" color="gray.500">
-                      {balance.currency}
-                    </Text>
-                    <Text fontWeight="bold" fontSize="xl">
-                      {balance.symbol}
-                      {balance.amount.toLocaleString()}
-                    </Text>
-                  </Box>
-                </HStack>
-              </MotionBox>
-            ))}
-          </HStack>
+          <FormControl isInvalid={!!withdrawErrors.currency}>
+            <HStack
+              hidden={loadingFiatBalance}
+              spacing={4}
+              overflowX="auto"
+              pb={2}
+              w="100%"
+            >
+              {fiatBalances.map((balance) => (
+                <MotionBox
+                  key={balance.currency}
+                  borderWidth="1px"
+                  borderColor={
+                    activeCurrency === balance.currency
+                      ? "brand.500"
+                      : borderColor
+                  }
+                  borderRadius="xl"
+                  p={4}
+                  cursor="pointer"
+                  onClick={() => setActiveCurrency(balance.currency)}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={spring}
+                  bg={
+                    activeCurrency === balance.currency
+                      ? highlightBgColor
+                      : cardBgColor
+                  }
+                  minW="180px"
+                  boxShadow={
+                    activeCurrency === balance.currency ? "md" : "none"
+                  }
+                >
+                  <HStack spacing={3}>
+                    <Flex
+                      p={2}
+                      borderRadius="lg"
+                      bg={iconBgColor}
+                      alignItems="center"
+                      justifyContent="center"
+                    >
+                      <Icon as={FiDollarSign} boxSize={5} color="brand.500" />
+                    </Flex>
+                    <Box>
+                      <Text fontSize="sm" color="gray.500">
+                        {balance.currency}
+                      </Text>
+                      <Text fontWeight="bold" fontSize="xl">
+                        {balance.symbol}
+                        {balance.amount.toLocaleString()}
+                      </Text>
+                    </Box>
+                  </HStack>
+                </MotionBox>
+              ))}
+            </HStack>
+            <FormErrorMessage>{withdrawErrors.currency}</FormErrorMessage>
+          </FormControl>
+          <Center hidden={!loadingFiatBalance}>
+            <Spinner size={"md"} />
+          </Center>
         </MotionBox>
 
         {/* Current Status */}
@@ -448,7 +550,7 @@ const WithdrawalPage = () => {
               </Text>
 
               {/* Amount Section */}
-              <FormControl>
+              <FormControl isInvalid={!!withdrawErrors.amount}>
                 <FormLabel>
                   Withdrawal Amount ({currentCurrency?.currency})
                 </FormLabel>
@@ -472,6 +574,7 @@ const WithdrawalPage = () => {
                     />
                   </NumberInput>
                 </InputGroup>
+                <FormErrorMessage>{withdrawErrors.amount}</FormErrorMessage>
                 <FormHelperText>
                   Available: {currentCurrency?.symbol}
                   {currentCurrency?.amount.toLocaleString()}
@@ -480,7 +583,7 @@ const WithdrawalPage = () => {
 
               <Flex justifyContent="space-between" alignItems="center">
                 <Text fontSize="sm" color={secondaryTextColor}>
-                  Withdrawal Fee (1%):
+                  Withdrawal Fee (Free):
                 </Text>
                 <Text fontSize="sm" fontWeight="medium">
                   {currentCurrency?.symbol}
@@ -516,7 +619,10 @@ const WithdrawalPage = () => {
                   </Tooltip>
                 </Flex>
 
-                <FormControl mb={4}>
+                <FormControl
+                  mb={4}
+                  isInvalid={!!withdrawErrors.withdrawal_type}
+                >
                   <FormLabel>Transfer Type</FormLabel>
                   <Select
                     value={bankType}
@@ -530,11 +636,18 @@ const WithdrawalPage = () => {
                       </option>
                     ))}
                   </Select>
+                  <FormErrorMessage>
+                    {withdrawErrors.withdrawal_type}
+                  </FormErrorMessage>
                 </FormControl>
 
                 <VStack spacing={4} align="stretch">
                   {getBankFields(bankType).map((field) => (
-                    <FormControl key={field.name} isRequired={field.required}>
+                    <FormControl
+                      key={field.name}
+                      isRequired={field.required}
+                      isInvalid={!!withdrawErrors[field.name]}
+                    >
                       <FormLabel>{field.label}</FormLabel>
                       <Input
                         name={field.name}
@@ -543,10 +656,33 @@ const WithdrawalPage = () => {
                         borderRadius="lg"
                         focusBorderColor="brand.500"
                       />
+                      <FormErrorMessage>
+                        {withdrawErrors[field.name]}
+                      </FormErrorMessage>
                     </FormControl>
                   ))}
 
-                  <FormControl>
+                  <FormControl isRequired isInvalid={!!withdrawErrors.pin}>
+                    <FormLabel>PIN</FormLabel>
+                    <HStack spacing={4}>
+                      <PinInput
+                        otp
+                        size="lg"
+                        value={formData.pin}
+                        onChange={(pin) => setFormData({ ...formData, pin })}
+                        focusBorderColor="brand.500"
+                        mask
+                      >
+                        <PinInputField borderRadius="lg" />
+                        <PinInputField borderRadius="lg" />
+                        <PinInputField borderRadius="lg" />
+                        <PinInputField borderRadius="lg" />
+                      </PinInput>
+                    </HStack>
+                    <FormErrorMessage>{withdrawErrors.pin}</FormErrorMessage>
+                  </FormControl>
+
+                  <FormControl isInvalid={!!withdrawErrors.reference}>
                     <FormLabel>Reference (Optional)</FormLabel>
                     <Input
                       name="reference"
@@ -556,10 +692,15 @@ const WithdrawalPage = () => {
                       borderRadius="lg"
                       focusBorderColor="brand.500"
                     />
+                    <FormErrorMessage>
+                      {withdrawErrors.reference}
+                    </FormErrorMessage>
+                    <FormHelperText>
+                      This will help you identify the transfer later
+                    </FormHelperText>
                   </FormControl>
 
                   <Checkbox
-                    colorScheme="brand"
                     isChecked={saveDetails}
                     onChange={() => setSaveDetails(!saveDetails)}
                     mt={2}
@@ -578,7 +719,8 @@ const WithdrawalPage = () => {
                 rightIcon={<FiArrowRight />}
                 onClick={handleSubmit}
                 isDisabled={
-                  !withdrawalAmount || parseFloat(withdrawalAmount) <= 0
+                  !withdrawalAmount
+                  // !withdrawalAmount || parseFloat(withdrawalAmount) <= 0
                 }
                 borderRadius="lg"
                 fontWeight="medium"
@@ -659,9 +801,9 @@ const WithdrawalPage = () => {
                 <Alert status="warning" borderRadius="md">
                   <AlertIcon />
                   <AlertDescription fontSize="sm">
-                    After clicking &quot;Confirm&quot;, your withdrawal request will be
-                    sent for admin verification. This process typically takes
-                    1-3 business days.
+                    After clicking &quot;Confirm&quot;, your withdrawal request
+                    will be sent for admin verification. This process typically
+                    takes 1-3 business days.
                   </AlertDescription>
                 </Alert>
               </VStack>
