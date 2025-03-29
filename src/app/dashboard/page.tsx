@@ -50,9 +50,18 @@ import {
   FiEdit,
 } from "react-icons/fi";
 import Link from "next/link";
-import { DashboardResponse, KycStage, Transaction } from "@/helpers/response";
+import {
+  DashboardResponse,
+  KycStage,
+  ReceivingAddress,
+  Transaction,
+} from "@/helpers/response";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { getDashboard, sendCrypto } from "@/store/thunks/ledgerThunk";
+import {
+  getAddresses,
+  getDashboard,
+  sendCrypto,
+} from "@/store/thunks/ledgerThunk";
 import { CRYPTO_CURRENCY, FIAT_CURRENCY } from "@/helpers/constants";
 import { selectUser } from "@/store/features/auth";
 import { copyToClipboard } from "@/helpers/utils";
@@ -161,8 +170,9 @@ const CryptoWalletDashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(
     null
   );
+  const [addresses, setAddresses] = useState<ReceivingAddress[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedReceive, setSelectedReceive] = useState<string>("");
+  const [selectedReceive, setSelectedReceive] = useState<number | null>(null);
   const [selectedSend, setSelectedSend] = useState<string>("");
   const [recipientAddress, setRecipientAddress] = useState<string>("");
   const [sendAmount, setSendAmount] = useState<number>(0);
@@ -255,6 +265,7 @@ const CryptoWalletDashboard = () => {
       name: CRYPTO_CURRENCY[currency].name,
       symbol: currency.toUpperCase(),
       balance: balance,
+      actual_balance: dashboardData?.actual_balances[currency] ?? 0,
       value: (dashboardData?.crypto_rates[currency]?.price as number) || 0,
       change: parseFloat(
         (
@@ -272,6 +283,7 @@ const CryptoWalletDashboard = () => {
       name: FIAT_CURRENCY[currency].name,
       symbol: currency.toUpperCase(),
       balance: balance,
+      actual_balance: dashboardData?.actual_balances[currency] ?? 0,
       value: dashboardData?.currency_price[currency] || 0,
       icon: FIAT_CURRENCY[currency].icon,
     }));
@@ -315,117 +327,130 @@ const CryptoWalletDashboard = () => {
         });
       })
       .finally(() => setLoading(false));
+
+    dispatch(getAddresses())
+      .unwrap()
+      .then((data) => {
+        setAddresses(data.data);
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "An error occurred.",
+          description: "Unable to fetch wallet addresses.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      });
   }, [dispatch, toast]);
 
   const renderTransactions = (transactions: Transaction[]) => {
     if (transactions.length === 0) {
       return (
         <Text color={mutedTextColor} textAlign="center" py={4}>
-        No transactions to display.
-      </Text>
-      )
+          No transactions to display.
+        </Text>
+      );
     }
     return (
-    <VStack spacing={3} align="stretch">
-      {transactions.map((tx, index) => (
-        <MotionBox
-          key={tx.id}
-          variants={cardVariants}
-          initial="hidden"
-          animate="visible"
-          custom={index}
-          transition={{ delay: 0.05 * index }}
-          bg={cardBgColor}
-          p={4}
-          borderRadius="xl"
-          boxShadow="sm"
-        >
-          <Flex
-            justifyContent="space-between"
-            alignItems="center"
+      <VStack spacing={3} align="stretch">
+        {transactions.map((tx, index) => (
+          <MotionBox
+            key={tx.id}
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            custom={index}
+            transition={{ delay: 0.05 * index }}
+            bg={cardBgColor}
+            p={4}
+            borderRadius="xl"
+            boxShadow="sm"
           >
-            <HStack spacing={3}>
-              <Flex
-                w={10}
-                h={10}
-                borderRadius="full"
-                bg={
-                  tx.meta_type === "receive"
-                    ? "green.100"
-                    : tx.meta_type === "send"
-                    ? "orange.100"
-                    : tx.meta_type === "buy"
-                    ? "blue.100"
-                    : tx.meta_type === "swap"
-                    ? "purple.100"
-                    : "red.100"
-                }
-                color={
-                  tx.meta_type === "receive"
-                    ? "green.500"
-                    : tx.meta_type === "send"
-                    ? "orange.500"
-                    : tx.meta_type === "buy"
-                    ? "blue.500"
-                    : tx.meta_type === "swap"
-                    ? "purple.500"
-                    : "red.500"
-                }
-                justifyContent="center"
-                alignItems="center"
-                fontSize="lg"
-              >
-                {tx.meta_type === "receive" ? (
-                  <FiArrowDown />
-                ) : tx.meta_type === "send" ? (
-                  <FiArrowUp />
-                ) : tx.meta_type === "buy" ? (
-                  <FiDollarSign />
-                ) : tx.meta_type === "swap" ? (
-                  <FiArrowRight />
-                ) : (
-                  <FiArrowUp />
-                )}
-              </Flex>
-              <VStack spacing={0} alignItems="flex-start">
-                <Text
-                  fontWeight="bold"
-                  textTransform="capitalize"
+            <Flex justifyContent="space-between" alignItems="center">
+              <HStack spacing={3}>
+                <Flex
+                  w={10}
+                  h={10}
+                  borderRadius="full"
+                  bg={
+                    tx.meta_type === "receive"
+                      ? "green.100"
+                      : tx.meta_type === "send"
+                      ? "orange.100"
+                      : tx.meta_type === "buy"
+                      ? "blue.100"
+                      : tx.meta_type === "swap"
+                      ? "purple.100"
+                      : "red.100"
+                  }
+                  color={
+                    tx.meta_type === "receive"
+                      ? "green.500"
+                      : tx.meta_type === "send"
+                      ? "orange.500"
+                      : tx.meta_type === "buy"
+                      ? "blue.500"
+                      : tx.meta_type === "swap"
+                      ? "purple.500"
+                      : "red.500"
+                  }
+                  justifyContent="center"
+                  alignItems="center"
+                  fontSize="lg"
                 >
-                  {tx.meta_type}
-                </Text>
-                <Text fontSize="xs" color={mutedTextColor}>
-                  {moment(tx.created).fromNow()}
-                </Text>
-              </VStack>
-            </HStack>
+                  {tx.meta_type === "receive" ? (
+                    <FiArrowDown />
+                  ) : tx.meta_type === "send" ? (
+                    <FiArrowUp />
+                  ) : tx.meta_type === "buy" ? (
+                    <FiDollarSign />
+                  ) : tx.meta_type === "swap" ? (
+                    <FiArrowRight />
+                  ) : (
+                    <FiArrowUp />
+                  )}
+                </Flex>
+                <VStack spacing={0} alignItems="flex-start">
+                  <Text fontWeight="bold" textTransform="capitalize">
+                    {tx.meta_type}
+                  </Text>
+                  <Text fontSize="xs" color={mutedTextColor}>
+                    {moment(tx.created).fromNow()}
+                  </Text>
+                </VStack>
+              </HStack>
 
-            <VStack spacing={0} alignItems="flex-end">
-              <Text fontWeight="bold">
-                {tx.tx_type === "credit"
-                  ? "+"
-                  : "-"}
-                {tx.currency_type === "crypto" ? tx.crypto_amount : tx.fiat_amount } {tx.currency}
-              </Text>
-              <Badge
-                colorScheme={
-                  tx.status === "completed"
-                    ? "green"
-                    : tx.status === "pending"
-                    ? "yellow"
-                    : "red"
-                }
-                fontSize="xs"
-              >
-                {tx.status}
-              </Badge>
-            </VStack>
-          </Flex>
-        </MotionBox>
-      ))}
-    </VStack>
-    )
-  }
+              <VStack spacing={0} alignItems="flex-end">
+                <Text fontWeight="bold">
+                  {tx.tx_type === "credit" ? "+" : "-"}
+                  {tx.currency_type === "crypto"
+                    ? parseFloat(parseFloat(tx.crypto_amount).toFixed(8))
+                    : parseFloat(
+                        parseFloat(tx.fiat_amount).toFixed(2)
+                      ).toLocaleString()}{" "}
+                  {tx.currency}
+                </Text>
+                <Badge
+                  colorScheme={
+                    tx.status === "completed"
+                      ? "green"
+                      : tx.status === "pending"
+                      ? "yellow"
+                      : "red"
+                  }
+                  fontSize="xs"
+                >
+                  {tx.status}
+                </Badge>
+              </VStack>
+            </Flex>
+          </MotionBox>
+        ))}
+      </VStack>
+    );
+  };
 
   return (
     <>
@@ -573,11 +598,11 @@ const CryptoWalletDashboard = () => {
 
                     <VStack spacing={0} alignItems="flex-end">
                       <Text fontWeight="bold">
-                        ${asset.value.toLocaleString()}
+                        ${parseFloat(asset.value.toFixed(2)).toLocaleString()}
                       </Text>
                       <HStack>
                         <Text fontSize="sm" color={mutedTextColor}>
-                          {asset.balance} {asset.symbol}
+                          {asset.actual_balance} {asset.symbol}
                         </Text>
                         <Badge
                           colorScheme={asset.change > 0 ? "green" : "red"}
@@ -635,11 +660,14 @@ const CryptoWalletDashboard = () => {
 
                     <VStack spacing={0} alignItems="flex-end">
                       <Text fontWeight="bold">
-                        ${asset.value.toLocaleString()}
+                        ${parseFloat(asset.value.toFixed(2)).toLocaleString()}
                       </Text>
                       <HStack>
                         <Text fontSize="sm" color={mutedTextColor}>
-                          {asset.balance} {asset.symbol}
+                          {parseFloat(
+                            asset.balance.toFixed(2)
+                          ).toLocaleString()}{" "}
+                          {asset.symbol}
                         </Text>
                       </HStack>
                     </VStack>
@@ -671,19 +699,39 @@ const CryptoWalletDashboard = () => {
                     {renderTransactions(dashboardData.transactions)}
                   </TabPanel>
                   <TabPanel px={0}>
-                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "send"))}
+                    {renderTransactions(
+                      dashboardData.transactions.filter(
+                        (tx) => tx.meta_type === "send"
+                      )
+                    )}
                   </TabPanel>
                   <TabPanel px={0}>
-                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "receive"))}
+                    {renderTransactions(
+                      dashboardData.transactions.filter(
+                        (tx) => tx.meta_type === "receive"
+                      )
+                    )}
                   </TabPanel>
                   <TabPanel px={0}>
-                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "buy"))}
+                    {renderTransactions(
+                      dashboardData.transactions.filter(
+                        (tx) => tx.meta_type === "buy"
+                      )
+                    )}
                   </TabPanel>
                   <TabPanel px={0}>
-                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "swap"))}
+                    {renderTransactions(
+                      dashboardData.transactions.filter(
+                        (tx) => tx.meta_type === "swap"
+                      )
+                    )}
                   </TabPanel>
                   <TabPanel px={0}>
-                    {renderTransactions(dashboardData.transactions.filter((tx) => tx.meta_type === "withdraw"))}
+                    {renderTransactions(
+                      dashboardData.transactions.filter(
+                        (tx) => tx.meta_type === "withdraw"
+                      )
+                    )}
                   </TabPanel>
                 </TabPanels>
               </Tabs>
@@ -708,7 +756,8 @@ const CryptoWalletDashboard = () => {
                     >
                       {cryptoAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.symbol}) - {asset.balance}{" "}
+                          {asset.name} ({asset.symbol}) -{" "}
+                          {parseFloat(asset.actual_balance.toFixed(8))}{" "}
                           available
                         </option>
                       ))}
@@ -793,13 +842,13 @@ const CryptoWalletDashboard = () => {
                     <FormLabel>Select Asset</FormLabel>
                     <Select
                       onChange={(e) => {
-                        setSelectedReceive(e.target.value);
+                        setSelectedReceive(parseInt(e.target.value));
                       }}
                       placeholder="Select asset"
                     >
-                      {cryptoAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.symbol})
+                      {addresses.map((asset, idx) => (
+                        <option key={asset.id} value={idx}>
+                          {CRYPTO_CURRENCY[asset.coin].name} ({asset.coin})
                         </option>
                       ))}
                     </Select>
@@ -814,44 +863,46 @@ const CryptoWalletDashboard = () => {
                     textAlign="center"
                   >
                     <Text>QR Code would appear here</Text>
-                    {CRYPTO_CURRENCY[selectedReceive] !== undefined && (
-                      <QrGenerator
-                        text={CRYPTO_CURRENCY[selectedReceive].wallet_address}
-                      />
-                    )}
+                    {selectedReceive !== null &&
+                      CRYPTO_CURRENCY[addresses[selectedReceive].coin] !==
+                        undefined && (
+                        <QrGenerator
+                          text={addresses[selectedReceive].address}
+                        />
+                      )}
                     <Text fontSize="xs" mt={4} color={mutedTextColor}>
                       Scan to receive payment
                     </Text>
                   </Box>
 
-                  {CRYPTO_CURRENCY[selectedReceive] !== undefined && (
-                    <FormControl>
-                      <FormLabel>Your Wallet Address</FormLabel>
-                      <Flex>
-                        <Input
-                          value={
-                            CRYPTO_CURRENCY[selectedReceive].wallet_address
-                          }
-                          isReadOnly
-                        />
-                        <Button
-                          onClick={() => {
-                            copyToClipboard(
-                              CRYPTO_CURRENCY[selectedReceive].wallet_address
-                            );
-                            toast({
-                              title: "Copied to clipboard",
-                              status: "info",
-                              duration: 2000,
-                            });
-                          }}
-                          ml={2}
-                        >
-                          Copy
-                        </Button>
-                      </Flex>
-                    </FormControl>
-                  )}
+                  {selectedReceive !== null &&
+                    CRYPTO_CURRENCY[addresses[selectedReceive].coin] !==
+                      undefined && (
+                      <FormControl>
+                        <FormLabel>Your Wallet Address</FormLabel>
+                        <Flex>
+                          <Input
+                            value={addresses[selectedReceive].address}
+                            isReadOnly
+                          />
+                          <Button
+                            onClick={() => {
+                              copyToClipboard(
+                                addresses[selectedReceive].address
+                              );
+                              toast({
+                                title: "Copied to clipboard",
+                                status: "info",
+                                duration: 2000,
+                              });
+                            }}
+                            ml={2}
+                          >
+                            Copy
+                          </Button>
+                        </Flex>
+                      </FormControl>
+                    )}
                 </VStack>
               </ModalBody>
             </ModalContent>

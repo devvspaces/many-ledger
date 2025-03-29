@@ -8,6 +8,7 @@ import {
   BankAccountResponse,
   DashboardResponse,
   MessageResponse,
+  ReceivingAddress,
   SendCryptoResponse,
 } from "@/helpers/response";
 
@@ -180,3 +181,24 @@ export const getSavedBankAccount = createAsyncThunk(
     }
   }
 );
+
+// Example: SavedBankAccountView
+export const getAddresses = createAsyncThunk(
+  "getAddresses",
+  async (_, { rejectWithValue }) => {
+    const url = `/ledger/addresses/`;
+    try {
+      const response = await API.get<ApiResponse<ReceivingAddress[]>>(url);
+      if (response.status !== 200) {
+        return rejectWithValue(response.data);
+      }
+      return response.data;
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        return rejectWithValue(err.response.data);
+      }
+      return rejectWithValue(err);
+    }
+  }
+);
+

@@ -308,7 +308,6 @@ const WithdrawalPage = () => {
         successModal.onOpen();
 
         // Reset form
-        setWithdrawalAmount("0");
         setActiveStep(1); // Move to verification step
 
         toast({
@@ -474,7 +473,7 @@ const WithdrawalPage = () => {
                       </Text>
                       <Text fontWeight="bold" fontSize="xl">
                         {balance.symbol}
-                        {balance.amount.toLocaleString()}
+                        {parseFloat(balance.amount.toFixed(2)).toLocaleString()}
                       </Text>
                     </Box>
                   </HStack>
@@ -577,7 +576,9 @@ const WithdrawalPage = () => {
                 <FormErrorMessage>{withdrawErrors.amount}</FormErrorMessage>
                 <FormHelperText>
                   Available: {currentCurrency?.symbol}
-                  {currentCurrency?.amount.toLocaleString()}
+                  {parseFloat(
+                    currentCurrency?.amount?.toFixed(2) ?? "0"
+                  ).toLocaleString()}
                 </FormHelperText>
               </FormControl>
 

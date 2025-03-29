@@ -95,6 +95,7 @@ type CryptoOption = {
   balance: number;
   price: number;
   change: number;
+  actual: number;
 };
 
 type FiatOption = {
@@ -150,6 +151,7 @@ const SwapPage = () => {
             ).toFixed(2)
           ),
           logo: CRYPTO_CURRENCY[currency].logo,
+          actual: data.data.actual_balances[currency] || 0,
         }));
         setCryptoOptions(cryptoAssets);
         setFromAsset(cryptoAssets[0].value);
@@ -453,7 +455,7 @@ const SwapPage = () => {
           {type === "crypto"
             ? cryptoOptions.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label} - Balance: {option.balance}
+                  {option.label}
                 </option>
               ))
             : fiatOptions.map((option) => (
@@ -503,7 +505,7 @@ const SwapPage = () => {
                       (c) => c.value === selectedAsset
                     );
                     if (crypto) {
-                      handleAmountChange(crypto.balance.toString());
+                      handleAmountChange(crypto.actual.toString());
                     }
                   }
                 }}
@@ -541,7 +543,7 @@ const SwapPage = () => {
 
       {direction === "from" && type === "crypto" && (
         <Text fontSize="xs" color={secondaryTextColor}>
-          Available balance: {(fromAssetInfo as CryptoOption)?.balance}{" "}
+          Available balance: {(fromAssetInfo as CryptoOption)?.actual.toLocaleString()}{" "}
           {fromAssetInfo?.value}
         </Text>
       )}

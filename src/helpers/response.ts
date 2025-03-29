@@ -125,14 +125,14 @@ export interface Transaction {
   iban?: string;
   reference?: string;
   bank_address?: string;
-  fiat_amount: number;
-  fiat_fee: number;
-  fiat_total: number;
+  fiat_amount: string;
+  fiat_fee: string;
+  fiat_total: string;
 
   // Crypto-specific fields
-  crypto_amount: number;
-  crypto_fee: number;
-  crypto_total: number;
+  crypto_amount: string;
+  crypto_fee: string;
+  crypto_total: string;
   receiving_address?: string;
 }
 
@@ -197,6 +197,7 @@ export interface DashboardResponse {
   total_balance: number;
   currency_balance: Record<string, number>;
   currency_price: Record<string, number>;
+  actual_balances: Record<string, number>;
   crypto_rates: Record<string, Record<string, string | number>>;
   transactions: Transaction[];
 }
@@ -207,6 +208,7 @@ export type SendCryptoResponse = Transaction;
 // Both GetCryptoBalancesView and GetFiatBalancesView return the same structure:
 export interface BalancesResponse {
   currency_balance: Record<string, number>;
+  actual_balances: Record<string, number>;
   currency_price: Record<string, number>;
   crypto_rates: Record<string, Record<string, string | number>>;
 }
@@ -218,3 +220,12 @@ export interface MessageResponse {
 
 // SavedBankAccountView returns a BankAccount object
 export type BankAccountResponse = BankAccount;
+
+
+// SavedBankAccountView returns a BankAccount object
+export type ReceivingAddress = {
+  id: string;
+  address: string;
+  coin: string;
+  created: string;
+};
