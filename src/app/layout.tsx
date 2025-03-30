@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PayVault Ledger",
+  title: "PayContinental",
   description: "A blockchain-based ledger vault built on the MPC protocol.",
 };
 

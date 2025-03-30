@@ -667,6 +667,15 @@ figure {
   transition: all .4s;
 }
 
+.go-more.cta-btn {
+  font-size: 1.3rem;
+}
+.go-more.cta-btn:after {
+  background: rgb(2 255 0 / 23%);
+  width: 45px;
+  height: 45px;
+}
+
 .go-more .icon {
   margin-left: 15px;
   bottom: -2px;
@@ -9263,6 +9272,11 @@ footer.clean-footer.crev:before {
   animation-iteration-count: infinite;
   -webkit-animation-timing-function: linear;
   animation-timing-function: linear;
+}
+
+#terms h4 {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
 }
 
 @-webkit-keyframes rotateCircle {
