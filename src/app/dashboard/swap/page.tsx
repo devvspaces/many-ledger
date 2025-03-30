@@ -54,7 +54,11 @@ import {
   FiCheck,
 } from "react-icons/fi";
 import { useAppDispatch } from "@/store/hooks";
-import { getCryptoBalances, getFiatBalances, swapCrypto } from "@/store/thunks/ledgerThunk";
+import {
+  getCryptoBalances,
+  getFiatBalances,
+  swapCrypto,
+} from "@/store/thunks/ledgerThunk";
 import { CRYPTO_CURRENCY, FIAT_CURRENCY } from "@/helpers/constants";
 
 // Motion components
@@ -111,7 +115,9 @@ const SwapPage = () => {
   const [loadingFiat, setLoadingFiat] = useState(false);
   const [cryptoOptions, setCryptoOptions] = useState<CryptoOption[]>([]);
   const [fiatOptions, setFiatOptions] = useState<FiatOption[]>([]);
-  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
+  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>(
+    {}
+  );
   const [fromType, setFromType] = useState("crypto");
   const [toType, setToType] = useState("fiat");
   const [fromAsset, setFromAsset] = useState<string | null>(null);
@@ -138,29 +144,32 @@ const SwapPage = () => {
       .unwrap()
       .then((data) => {
         const cryptoAssets = Object.entries(data.data.currency_balance || {})
-        .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
-        .map(([currency, balance]) => ({
-          label: `${CRYPTO_CURRENCY[currency].name} (${currency})`,
-          value: currency.toUpperCase(),
-          balance: balance,
-          price: (data.data.crypto_rates[currency]?.price as number) || 0,
-          change: parseFloat(
-            (
-              (data.data.crypto_rates[currency]
-                ?.percent_change_1h as number) || 0
-            ).toFixed(2)
-          ),
-          logo: CRYPTO_CURRENCY[currency].logo,
-          actual: data.data.actual_balances[currency] || 0,
-        }));
+          .filter(
+            ([currency]) =>
+              CRYPTO_CURRENCY[currency] !== undefined && currency !== "ETH"
+          )
+          .map(([currency, balance]) => ({
+            label: `${CRYPTO_CURRENCY[currency].name} (${currency})`,
+            value: currency.toUpperCase(),
+            balance: balance,
+            price: (data.data.crypto_rates[currency]?.price as number) || 0,
+            change: parseFloat(
+              (
+                (data.data.crypto_rates[currency]
+                  ?.percent_change_1h as number) || 0
+              ).toFixed(2)
+            ),
+            logo: CRYPTO_CURRENCY[currency].logo,
+            actual: data.data.actual_balances[currency] || 0,
+          }));
         setCryptoOptions(cryptoAssets);
         setFromAsset(cryptoAssets[0].value);
 
         const cryptoRates = Object.entries(data.data.currency_balance || {})
-        .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
-        .map(([currency]) => ({
-          [currency]: data.data.currency_price[currency] || 0
-        }));
+          .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
+          .map(([currency]) => ({
+            [currency]: data.data.currency_price[currency] || 0,
+          }));
         setCurrencyRates((prev) => ({
           ...prev,
           ...Object.assign({}, ...cryptoRates),
@@ -180,47 +189,47 @@ const SwapPage = () => {
       .finally(() => {
         setLoading(false);
       });
-      
+
     setLoadingFiat(true);
     dispatch(getFiatBalances())
-    .unwrap()
-    .then((data) => {
-      const fiatAssets = Object.entries(data.data.currency_balance || {})
-      .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
-      .map(([currency, balance]) => ({
-        label: `${FIAT_CURRENCY[currency].name} (${currency})`,
-        value: currency.toUpperCase(),
-        balance: balance,
-        price: data.data.currency_price[currency] || 0,
-        icon: FIAT_CURRENCY[currency].icon,
-      }));
-      setFiatOptions(fiatAssets);
-      setToAsset(fiatAssets[0].value);
+      .unwrap()
+      .then((data) => {
+        const fiatAssets = Object.entries(data.data.currency_balance || {})
+          .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
+          .map(([currency, balance]) => ({
+            label: `${FIAT_CURRENCY[currency].name} (${currency})`,
+            value: currency.toUpperCase(),
+            balance: balance,
+            price: data.data.currency_price[currency] || 0,
+            icon: FIAT_CURRENCY[currency].icon,
+          }));
+        setFiatOptions(fiatAssets);
+        setToAsset(fiatAssets[0].value);
 
-      const fiatRates = Object.entries(data.data.currency_balance || {})
-      .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
-      .map(([currency]) => ({
-        [currency]: data.data.currency_price[currency] || 0
-      }));
-      setCurrencyRates((prev) => ({
-        ...prev,
-        ...Object.assign({}, ...fiatRates),
-      }));
-    })
-    .catch((err) => {
-      console.log(err);
-      toast({
-        title: "Error fetching data",
-        description: "An error occurred while fetching data",
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-        position: "top",
+        const fiatRates = Object.entries(data.data.currency_balance || {})
+          .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
+          .map(([currency]) => ({
+            [currency]: data.data.currency_price[currency] || 0,
+          }));
+        setCurrencyRates((prev) => ({
+          ...prev,
+          ...Object.assign({}, ...fiatRates),
+        }));
+      })
+      .catch((err) => {
+        console.log(err);
+        toast({
+          title: "Error fetching data",
+          description: "An error occurred while fetching data",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setLoadingFiat(false);
       });
-    })
-    .finally(() => {
-      setLoadingFiat(false);
-    });
   }, [dispatch, toast]);
 
   // Color mode values
@@ -230,18 +239,23 @@ const SwapPage = () => {
   const cardBgColor = useColorModeValue("white", "gray.750");
   const secondaryTextColor = useColorModeValue("gray.600", "gray.400");
 
-  const calculateRate = useCallback((from: string, to: string) => {
-    setLoadingRate(true);
-    setTimeout(() => {
-      // Find the from and to assets
-      const rate = (currencyRates[from] / currencyRates[to]);
-      // Apply a small fee (0.5%)
-      const rateWithFee = rate // * 0.995;
-      setExchangeRate(rateWithFee);
-      setToAmount((parseFloat(fromAmount) * rateWithFee).toFixed(isFiat(to) ? 2 : 6));
-      setLoadingRate(false);
-    }, 800);
-  }, [currencyRates, fromAmount, isFiat]);
+  const calculateRate = useCallback(
+    (from: string, to: string) => {
+      setLoadingRate(true);
+      setTimeout(() => {
+        // Find the from and to assets
+        const rate = currencyRates[from] / currencyRates[to];
+        // Apply a small fee (0.5%)
+        const rateWithFee = rate; // * 0.995;
+        setExchangeRate(rateWithFee);
+        setToAmount(
+          (parseFloat(fromAmount) * rateWithFee).toFixed(isFiat(to) ? 2 : 6)
+        );
+        setLoadingRate(false);
+      }, 800);
+    },
+    [currencyRates, fromAmount, isFiat]
+  );
 
   // Handle asset selection
   interface HandleAssetChangeParams {
@@ -326,12 +340,14 @@ const SwapPage = () => {
   // Handle confirm swap
   const handleConfirmSwap = () => {
     setIsLoading(true);
-    dispatch(swapCrypto({
-      from_currency: fromAsset!,
-      to_currency: toAsset!,
-      amount: parseFloat(fromAmount),
-      pin,
-    }))
+    dispatch(
+      swapCrypto({
+        from_currency: fromAsset!,
+        to_currency: toAsset!,
+        amount: parseFloat(fromAmount),
+        pin,
+      })
+    )
       .unwrap()
       .then(() => {
         reviewModal.onClose();
@@ -347,7 +363,7 @@ const SwapPage = () => {
         });
       })
       .catch((err) => {
-        console.log(err)
+        console.log(err);
         if (err.data.pin) {
           toast({
             title: "Error processing swap",
@@ -361,7 +377,9 @@ const SwapPage = () => {
           reviewModal.onClose();
           toast({
             title: "Error processing swap",
-            description: err.data.amount[0] ?? "An error occurred while processing your swap",
+            description:
+              err.data.amount[0] ??
+              "An error occurred while processing your swap",
             status: "error",
             duration: 5000,
             isClosable: true,
@@ -371,8 +389,7 @@ const SwapPage = () => {
       })
       .finally(() => {
         setIsLoading(false);
-      })
-    
+      });
   };
 
   // Initialize exchange rate on component mount
@@ -387,7 +404,7 @@ const SwapPage = () => {
     if (type === "crypto") {
       return cryptoOptions.find((c) => c.value === asset);
     }
-    return fiatOptions.find((f) => f.value === asset)
+    return fiatOptions.find((f) => f.value === asset);
   };
 
   const fromAssetInfo = getAssetInfo(fromType, fromAsset);
@@ -474,11 +491,16 @@ const SwapPage = () => {
               color="gray.500"
               fontSize="lg"
             >
-              {type === "crypto"
-                ? (
-                  <Image src={(fromAssetInfo as CryptoOption)?.logo} w={6} h={6} alt={fromAssetInfo?.label} />
-                )
-                : (fromAssetInfo as FiatOption)?.icon}
+              {type === "crypto" ? (
+                <Image
+                  src={(fromAssetInfo as CryptoOption)?.logo}
+                  w={6}
+                  h={6}
+                  alt={fromAssetInfo?.label}
+                />
+              ) : (
+                (fromAssetInfo as FiatOption)?.icon
+              )}
             </InputLeftElement>
             <NumberInput
               value={fromAmount}
@@ -523,11 +545,16 @@ const SwapPage = () => {
               color="gray.500"
               fontSize="lg"
             >
-              {type === "crypto"
-                ? (
-                  <Image src={(toAssetInfo as CryptoOption)?.logo} w={6} h={6} alt={toAssetInfo?.label} />
-                )
-                : (toAssetInfo as FiatOption)?.icon}
+              {type === "crypto" ? (
+                <Image
+                  src={(toAssetInfo as CryptoOption)?.logo}
+                  w={6}
+                  h={6}
+                  alt={toAssetInfo?.label}
+                />
+              ) : (
+                (toAssetInfo as FiatOption)?.icon
+              )}
             </InputLeftElement>
             <Input
               value={toAmount}
@@ -543,7 +570,8 @@ const SwapPage = () => {
 
       {direction === "from" && type === "crypto" && (
         <Text fontSize="xs" color={secondaryTextColor}>
-          Available balance: {(fromAssetInfo as CryptoOption)?.actual.toLocaleString()}{" "}
+          Available balance:{" "}
+          {(fromAssetInfo as CryptoOption)?.actual.toLocaleString()}{" "}
           {fromAssetInfo?.value}
         </Text>
       )}
@@ -596,9 +624,7 @@ const SwapPage = () => {
                   <HStack mb={1}>
                     <HStack spacing={2}>
                       <Image src={crypto.logo} w={6} h={6} alt={crypto.label} />
-                    <Text fontWeight="bold">
-                      {crypto.value}
-                    </Text>
+                      <Text fontWeight="bold">{crypto.value}</Text>
                     </HStack>
                     <Badge
                       colorScheme={crypto.change >= 0 ? "green" : "red"}
@@ -630,7 +656,7 @@ const SwapPage = () => {
                 <CardBody p={4}>
                   <HStack mb={1}>
                     <Text fontWeight="bold">
-                    {fiat.icon} {fiat.value}
+                      {fiat.icon} {fiat.value}
                     </Text>
                   </HStack>
                   <Text fontSize="lg" fontWeight="medium">
@@ -641,110 +667,109 @@ const SwapPage = () => {
             ))}
           </HStack>
           <Center hidden={!loading && !loadingFiat}>
-            <Spinner size={'md'} />
+            <Spinner size={"md"} />
           </Center>
         </MotionBox>
 
         {/* Main Swap Card */}
-        {
-          fromAsset && toAsset && (
-            <MotionBox variants={itemVariants}>
-          <Box
-            borderWidth="1px"
-            borderColor={borderColor}
-            borderRadius="2xl"
-            p={6}
-            bg={bgColor}
-            boxShadow="lg"
-          >
-            {/* From Section */}
-            <AssetSelector
-              direction="from"
-              type={fromType as "crypto" | "fiat"}
-              selectedAsset={fromAsset}
-            />
-
-            {/* Swap Button */}
-            <Flex justify="center" my={6}>
-              <MotionBox
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                transition={spring}
-              >
-                <IconButton
-                  aria-label="Swap direction"
-                  icon={<FiArrowDown />}
-                  onClick={handleSwapDirection}
-                  colorScheme="blue"
-                  size="lg"
-                  isRound
-                  shadow="md"
-                />
-              </MotionBox>
-            </Flex>
-
-            {/* To Section */}
-            <AssetSelector
-              direction="to"
-              type={toType as "crypto" | "fiat"}
-              selectedAsset={toAsset}
-            />
-
-            {/* Exchange Rate */}
-            <Box mt={6} p={4} bg={accentBgColor} borderRadius="lg">
-              <HStack justify="space-between">
-                <Text fontSize="sm" color={secondaryTextColor}>
-                  Exchange Rate
-                </Text>
-                {loadingRate ? (
-                  <Skeleton height="20px" width="140px" />
-                ) : (
-                  <HStack>
-                    <Text fontSize="sm">
-                      1 {fromAssetInfo?.value} ≈ {parseFloat(exchangeRate.toFixed(
-                        isFiat(toAsset) ? 2 : 6
-                      )).toLocaleString()}{" "}
-                      {toAssetInfo?.value}
-                    </Text>
-                    <Icon
-                      as={FiRefreshCw}
-                      cursor="pointer"
-                      onClick={() => calculateRate(fromAsset!, toAsset!)}
-                      color="brand.500"
-                    />
-                  </HStack>
-                )}
-              </HStack>
-
-              <Divider my={3} />
-
-              <HStack justify="space-between">
-                <Text fontSize="sm" color={secondaryTextColor}>
-                  Fee
-                </Text>
-                <Text fontSize="sm">0%</Text>
-              </HStack>
-            </Box>
-
-            {/* Action Button */}
-            <Button
-              mt={6}
-              size="lg"
-              width="100%"
-              bg="brand.500"
-              color="white"
-              _hover={{ bg: "brand.600" }}
-              leftIcon={<FiRotateCw />}
-              onClick={handleReviewSwap}
-              isDisabled={parseFloat(fromAmount) <= 0 || loadingRate}
-              borderRadius="xl"
+        {fromAsset && toAsset && (
+          <MotionBox variants={itemVariants}>
+            <Box
+              borderWidth="1px"
+              borderColor={borderColor}
+              borderRadius="2xl"
+              p={6}
+              bg={bgColor}
+              boxShadow="lg"
             >
-              Review Swap
-            </Button>
-          </Box>
-        </MotionBox>
-          )
-        }
+              {/* From Section */}
+              <AssetSelector
+                direction="from"
+                type={fromType as "crypto" | "fiat"}
+                selectedAsset={fromAsset}
+              />
+
+              {/* Swap Button */}
+              <Flex justify="center" my={6}>
+                <MotionBox
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={spring}
+                >
+                  <IconButton
+                    aria-label="Swap direction"
+                    icon={<FiArrowDown />}
+                    onClick={handleSwapDirection}
+                    colorScheme="blue"
+                    size="lg"
+                    isRound
+                    shadow="md"
+                  />
+                </MotionBox>
+              </Flex>
+
+              {/* To Section */}
+              <AssetSelector
+                direction="to"
+                type={toType as "crypto" | "fiat"}
+                selectedAsset={toAsset}
+              />
+
+              {/* Exchange Rate */}
+              <Box mt={6} p={4} bg={accentBgColor} borderRadius="lg">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" color={secondaryTextColor}>
+                    Exchange Rate
+                  </Text>
+                  {loadingRate ? (
+                    <Skeleton height="20px" width="140px" />
+                  ) : (
+                    <HStack>
+                      <Text fontSize="sm">
+                        1 {fromAssetInfo?.value} ≈{" "}
+                        {parseFloat(
+                          exchangeRate.toFixed(isFiat(toAsset) ? 2 : 6)
+                        ).toLocaleString()}{" "}
+                        {toAssetInfo?.value}
+                      </Text>
+                      <Icon
+                        as={FiRefreshCw}
+                        cursor="pointer"
+                        onClick={() => calculateRate(fromAsset!, toAsset!)}
+                        color="brand.500"
+                      />
+                    </HStack>
+                  )}
+                </HStack>
+
+                <Divider my={3} />
+
+                <HStack justify="space-between">
+                  <Text fontSize="sm" color={secondaryTextColor}>
+                    Fee
+                  </Text>
+                  <Text fontSize="sm">0%</Text>
+                </HStack>
+              </Box>
+
+              {/* Action Button */}
+              <Button
+                mt={6}
+                size="lg"
+                width="100%"
+                bg="brand.500"
+                color="white"
+                _hover={{ bg: "brand.600" }}
+                leftIcon={<FiRotateCw />}
+                onClick={handleReviewSwap}
+                isDisabled={parseFloat(fromAmount) <= 0 || loadingRate}
+                borderRadius="xl"
+              >
+                Review Swap
+              </Button>
+            </Box>
+          </MotionBox>
+        )}
 
         {/* Review Modal */}
         <Modal
@@ -817,7 +842,6 @@ const SwapPage = () => {
                   </Box>
                 </Box>
 
-                
                 <FormControl isRequired>
                   <FormLabel>PIN</FormLabel>
                   <HStack spacing={4}>
