@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import {
   Box,
   VStack,
@@ -62,23 +62,11 @@ const logoVariants = {
   },
 };
 
-const LoginPage = () => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [errors, setErrors] = useState<{
-    username?: string[];
-    password?: string[];
-  }>({});
-  const dispatch = useAppDispatch();
-
-  const router = useRouter();
+function UrlChecker() {
   const params = useSearchParams();
-  const toast = useToast();
   const email_verification = params.get("email_verification");
-
+  const router = useRouter();
+  const toast = useToast();
   useEffect(() => {
     if (email_verification === "success") {
       toast({
@@ -103,6 +91,23 @@ const LoginPage = () => {
     // Remove the query parameter from the URL after showing the toast
     router.replace("/login");
   }, [email_verification, toast, router]);
+  return null;
+}
+
+const LoginPage = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [errors, setErrors] = useState<{
+    username?: string[];
+    password?: string[];
+  }>({});
+  const dispatch = useAppDispatch();
+
+  const router = useRouter();
+  const toast = useToast();
 
   // Color mode values
   const bgGradient = useColorModeValue(
@@ -176,6 +181,9 @@ const LoginPage = () => {
       bgGradient={bgGradient}
       p={4}
     >
+      <Suspense>
+        <UrlChecker />
+      </Suspense>
       <Container maxW="container.sm">
         <MotionFlex
           variants={containerVariants}
