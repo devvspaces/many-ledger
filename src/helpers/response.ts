@@ -110,6 +110,8 @@ export interface Transaction {
   transaction_id: string;
   currency_type: TransactionCurrencyType;
   currency: Currency;
+  swap_from_currency?: Currency;
+  swap_to_currency?: Currency;
   meta_type: TransactionMetaType;
   status: TransactionStatus;
   created: string;

@@ -353,6 +353,11 @@ const CryptoWalletDashboard = () => {
         </Text>
       );
     }
+    function showSwap(tx: Transaction) {
+      if (tx.swap_from_currency && tx.swap_to_currency) {
+        return ` ${tx.swap_from_currency} → ${tx.swap_to_currency}`
+      }
+    }
     return (
       <VStack spacing={3} align="stretch">
         {transactions.map((tx, index) => (
@@ -414,7 +419,7 @@ const CryptoWalletDashboard = () => {
                 </Flex>
                 <VStack spacing={0} alignItems="flex-start">
                   <Text fontWeight="bold" textTransform="capitalize">
-                    {tx.meta_type}
+                    {tx.meta_type}{showSwap(tx)}
                   </Text>
                   <Text fontSize="xs" color={mutedTextColor}>
                     {moment(tx.created).fromNow()}
@@ -992,10 +997,14 @@ const CryptoWalletDashboard = () => {
                             h={8}
                             borderRadius="full"
                             bg={
-                              kycStatus === "pending" ? "green.100" : "gray.100"
+                              kycStatus === KycStage.VerificationReview
+                                ? "green.100"
+                                : "gray.100"
                             }
                             color={
-                              kycStatus === "pending" ? "green.500" : "gray.500"
+                              kycStatus === KycStage.VerificationReview
+                                ? "green.500"
+                                : "gray.500"
                             }
                             justifyContent="center"
                             alignItems="center"
@@ -1031,10 +1040,14 @@ const CryptoWalletDashboard = () => {
                             h={8}
                             borderRadius="full"
                             bg={
-                              kycStatus === "pending" ? "green.100" : "gray.100"
+                              kycStatus === KycStage.VerificationReview
+                                ? "green.100"
+                                : "gray.100"
                             }
                             color={
-                              kycStatus === "pending" ? "green.500" : "gray.500"
+                              kycStatus === KycStage.VerificationReview
+                                ? "green.500"
+                                : "gray.500"
                             }
                             justifyContent="center"
                             alignItems="center"
@@ -1068,12 +1081,12 @@ const CryptoWalletDashboard = () => {
                             h={8}
                             borderRadius="full"
                             bg={
-                              kycStatus === "pending"
+                              kycStatus === KycStage.VerificationReview
                                 ? "yellow.100"
                                 : "gray.100"
                             }
                             color={
-                              kycStatus === "pending"
+                              kycStatus === KycStage.VerificationReview
                                 ? "yellow.500"
                                 : "gray.500"
                             }
@@ -1104,13 +1117,15 @@ const CryptoWalletDashboard = () => {
                         </HStack>
                       </VStack>
 
-                      {kycStatus !== "pending" && (
+                      {kycStatus === KycStage.PersonalInfo && (
                         <Button
                           colorScheme="brand"
                           size="lg"
                           width="full"
                           mt={2}
                           leftIcon={<FiPaperclip />}
+                          as={Link}
+                          href="/dashboard/kyc"
                         >
                           Start Verification
                         </Button>
@@ -1125,6 +1140,10 @@ const CryptoWalletDashboard = () => {
                     leftIcon={<FiEdit />}
                     as={Link}
                     href="/dashboard/kyc"
+                    hidden={
+                      kycStatus === KycStage.Verified ||
+                      kycStatus === KycStage.PersonalInfo
+                    }
                   >
                     Update
                   </Button>

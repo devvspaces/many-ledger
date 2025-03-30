@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   VStack,
@@ -24,7 +24,7 @@ import {
 import { motion } from "framer-motion";
 import { FiEye, FiEyeOff, FiLock, FiArrowRight } from "react-icons/fi";
 import NextLink from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppDispatch } from "@/store/hooks";
 import { login } from "@/store/thunks/authThunk";
 
@@ -75,7 +75,34 @@ const LoginPage = () => {
   const dispatch = useAppDispatch();
 
   const router = useRouter();
+  const params = useSearchParams();
   const toast = useToast();
+  const email_verification = params.get("email_verification");
+
+  useEffect(() => {
+    if (email_verification === "success") {
+      toast({
+        title: "Email Verification",
+        description: "Your email has been verified successfully.",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+        position: "top",
+      });
+    }
+    if (email_verification === "failed") {
+      toast({
+        title: "Email Verification",
+        description: "There was an error verifying your email.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+        position: "top",
+      });
+    }
+    // Remove the query parameter from the URL after showing the toast
+    router.replace("/login");
+  }, [email_verification, toast, router]);
 
   // Color mode values
   const bgGradient = useColorModeValue(

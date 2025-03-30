@@ -23,6 +23,8 @@ export interface RefreshDto {
 export interface LoginDto {
   username: string;
   password: string;
+  email?: string;
+  country?: string;
 }
 
 export interface ForgotPasswordDto {

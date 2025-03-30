@@ -35,6 +35,7 @@ import {
   AlertIcon,
   Progress,
   FormErrorMessage,
+  Select,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -52,6 +53,7 @@ import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDispatch } from "@/store/hooks";
 import { register } from "@/store/thunks/authThunk";
+import { countryList } from "@/helpers/constants";
 
 // Motion components
 const MotionBox = motion(Box);
@@ -103,6 +105,8 @@ const phraseItemVariants = {
 
 const SignupPage = () => {
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -112,7 +116,7 @@ const SignupPage = () => {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [phrasesCopied, setPhrasesCopied] = useState(false);
   const [phrasesVerified, setPhrasesVerified] = useState(false);
-  
+
   const dispatch = useAppDispatch();
   const router = useRouter();
   const toast = useToast();
@@ -145,7 +149,7 @@ const SignupPage = () => {
     setPasswordStrength(strength);
   };
 
-  const handlePasswordChange = (e: { target: { value: unknown; }; }) => {
+  const handlePasswordChange = (e: { target: { value: unknown } }) => {
     const value = e.target.value;
     setPassword(value as string);
     checkPasswordStrength(value as string);
@@ -161,13 +165,21 @@ const SignupPage = () => {
   const [errors, setErrors] = useState<{
     username?: string[];
     password?: string[];
+    email?: string[];
+    country?: string[];
   }>({});
-  const handleSignup = async (e: { preventDefault: () => void; }) => {
+  const handleSignup = async (e: { preventDefault: () => void }) => {
     setErrors({});
     e.preventDefault();
 
     // Form validation
-    if (!username || !password || !confirmPassword) {
+    if (
+      !username ||
+      !password ||
+      !confirmPassword ||
+      !email ||
+      !selectedCountry
+    ) {
       toast({
         title: "Error",
         description: "Please fill in all fields",
@@ -220,6 +232,8 @@ const SignupPage = () => {
       register({
         username,
         password,
+        email,
+        country: selectedCountry,
       })
     )
       .unwrap()
@@ -405,6 +419,62 @@ const SignupPage = () => {
                       </FormErrorMessage>
                     </FormControl>
 
+                    <FormControl isRequired isInvalid={!!errors.email}>
+                      <FormLabel>Email</FormLabel>
+                      <InputGroup>
+                        <InputLeftElement pointerEvents="none">
+                          <Icon as={FiUser} color="gray.500" />
+                        </InputLeftElement>
+                        <Input
+                          type="text"
+                          placeholder="Enter your email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          _hover={{ borderColor: "brand.400" }}
+                          _focus={{
+                            borderColor: "brand.500",
+                            boxShadow: "0 0 0 1px #0066CC",
+                          }}
+                          size="lg"
+                          borderRadius="xl"
+                          bg={useColorModeValue("white", "gray.700")}
+                        />
+                      </InputGroup>
+                      <FormErrorMessage>
+                        {errors.email && errors.email[0]}
+                      </FormErrorMessage>
+                    </FormControl>
+
+                    <FormControl isRequired isInvalid={!!errors.username}>
+                      <FormLabel>Country</FormLabel>
+                      <Select
+                        bg={useColorModeValue("white", "gray.700")}
+                        placeholder="Select a Country"
+                        size="lg"
+                        borderRadius="xl"
+                        borderColor={borderColor}
+                        value={selectedCountry}
+                        onChange={(e) => setSelectedCountry(e.target.value)}
+                        _hover={{ borderColor: "brand.400" }}
+                        _focus={{
+                          borderColor: "brand.500",
+                          boxShadow: "0 0 0 1px #0066CC",
+                        }}
+                      >
+                        {
+                          /* Loop through the country list and create options */
+                          countryList.map((country, index) => (
+                            <option key={index} value={country.toLowerCase()}>
+                              {country}
+                            </option>
+                          ))
+                        }
+                      </Select>
+                      <FormErrorMessage>
+                        {errors.country && errors.country[0]}
+                      </FormErrorMessage>
+                    </FormControl>
+
                     <FormControl isRequired isInvalid={!!errors.password}>
                       <FormLabel>Password</FormLabel>
                       <InputGroup>
@@ -472,11 +542,12 @@ const SignupPage = () => {
                           </Flex>
                         </Box>
                       )}
-                      {
-                        errors.password && errors.password.map((error, index) => (
-                          <FormErrorMessage key={index}>{error}</FormErrorMessage>
-                        ))
-                      }
+                      {errors.password &&
+                        errors.password.map((error, index) => (
+                          <FormErrorMessage key={index}>
+                            {error}
+                          </FormErrorMessage>
+                        ))}
                     </FormControl>
 
                     <FormControl isRequired>
