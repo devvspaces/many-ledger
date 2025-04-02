@@ -21,3 +21,26 @@ export const getNotifications = createAsyncThunk(
     }
   }
 );
+
+export const countUnreadNotifications = createAsyncThunk(
+  "countUnreadNotifications",
+  async (req, { rejectWithValue }) => {
+    const url = `/account/notifications/unread/`;
+    try {
+      const response = await API.get<
+        ApiResponse<{
+          count: number;
+        }>
+      >(url);
+      if (response.status !== 200) {
+        return rejectWithValue(response.data);
+      }
+      return response.data.data.count;
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        return rejectWithValue(err.response.data);
+      }
+      return rejectWithValue(err);
+    }
+  }
+);

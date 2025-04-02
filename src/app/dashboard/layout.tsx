@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
   Flex,
@@ -26,9 +26,10 @@ import {
 import { useRouter } from "next/navigation";
 import { PiHandWithdrawBold } from "react-icons/pi";
 import { withAuth } from "@/hoc/withAuth";
-import { useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectUser } from "@/store/features/auth";
 import { KycStage } from "@/helpers/response";
+import { countUnreadNotifications } from "@/store/thunks/notificationsThunk";
 
 function Layout({
   children,
@@ -36,6 +37,7 @@ function Layout({
   children: React.ReactNode;
 }>) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const user = useAppSelector(selectUser)!;
 
   const navRoute = {
@@ -59,7 +61,33 @@ function Layout({
   const { colorMode, toggleColorMode } = useColorMode();
 
   // Notification count
-  const notificationCount = 0;
+  const [notificationCount, setNotificationCount] = useState(0);
+  const pollNotification = useRef<number | null>(null);
+  useEffect(() => {
+    const fetchNotificationCount = () => {
+      dispatch(countUnreadNotifications())
+        .unwrap()
+        .then((count) => {
+          setNotificationCount(count);
+        })
+        .catch((error) => {
+          console.error("Error fetching notification count:", error);
+        });
+    };
+
+    fetchNotificationCount();
+
+    // Polling for notification count every 5 seconds
+    pollNotification.current = window.setInterval(() => {
+      fetchNotificationCount();
+    }, 5000);
+
+    return () => {
+      if (pollNotification.current) {
+        clearInterval(pollNotification.current);
+      }
+    };
+  }, [dispatch]);
 
   // KYC status
   const kycStatus: string = user.profile.kyc_stage; // 'pending', 'verified', 'incomplete'
@@ -98,7 +126,7 @@ function Layout({
                 Welcome,{" "}
                 <span
                   style={{
-                    textTransform: "capitalize"
+                    textTransform: "capitalize",
                   }}
                 >
                   {user.username}
