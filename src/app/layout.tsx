@@ -32,7 +32,7 @@ export default function RootLayout({
           <Providers>{children}</Providers>
         </StoreProvider>
         <Script
-          src="//code.jivosite.com/widget/23ocD7mmUl"
+          src="//code.jivosite.com/widget/jrNpy0Cc95"
           strategy="lazyOnload"
           async
         />
