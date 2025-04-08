@@ -36,7 +36,7 @@ export const CRYPTO_CURRENCY: Record<
   },
   BNB: {
     name: "Binance Coin",
-    logo: "./binance-coin-bnb-logo.png",
+    logo: "./bnb-bnb-logo.png",
     wallet_address: "0xBA401CdaC1A3b6AEeDe21c9C4a483be6C29F88C5",
   },
   SOL: {
