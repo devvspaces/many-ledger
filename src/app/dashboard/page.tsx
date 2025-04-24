@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Box,
   Flex,
@@ -38,6 +38,7 @@ import {
   FormErrorMessage,
   PinInput,
   PinInputField,
+  IconButton,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -48,6 +49,7 @@ import {
   FiPaperclip,
   FiLock,
   FiEdit,
+  FiRefreshCcw,
 } from "react-icons/fi";
 import Link from "next/link";
 import {
@@ -67,6 +69,7 @@ import { selectUser } from "@/store/features/auth";
 import { copyToClipboard } from "@/helpers/utils";
 import { QRCodeSVG } from "qrcode.react";
 import moment from "moment";
+import { MiniChart } from "react-ts-tradingview-widgets";
 
 const YoutubeEmbed = ({ videoId }: { videoId: string }) => {
   const embedUrl = `https://www.youtube.com/embed/${videoId}`;
@@ -152,6 +155,11 @@ const CryptoWalletDashboard = () => {
     onClose: onSendClose,
   } = useDisclosure();
   const {
+    isOpen: isChartOpen,
+    onOpen: onChartOpen,
+    onClose: onChartClose,
+  } = useDisclosure();
+  const {
     isOpen: isReceiveOpen,
     onOpen: onReceiveOpen,
     onClose: onReceiveClose,
@@ -170,6 +178,7 @@ const CryptoWalletDashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(
     null
   );
+  const [selectedAsset, setSelectedAsset] = useState<string>("BTCUSD");
   const [addresses, setAddresses] = useState<ReceivingAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReceive, setSelectedReceive] = useState<number | null>(null);
@@ -309,9 +318,8 @@ const CryptoWalletDashboard = () => {
 
   const toast = useToast();
 
-  useEffect(() => {
-    setLoading(true);
-    dispatch(getDashboard())
+  const fetchDashboard = useCallback(() => {
+    return dispatch(getDashboard())
       .unwrap()
       .then((data) => {
         setDashboardData(data.data);
@@ -327,7 +335,9 @@ const CryptoWalletDashboard = () => {
         });
       })
       .finally(() => setLoading(false));
-
+  }, [dispatch, toast]);
+  useEffect(() => {
+    setLoading(true);
     dispatch(getAddresses())
       .unwrap()
       .then((data) => {
@@ -343,7 +353,8 @@ const CryptoWalletDashboard = () => {
           isClosable: true,
         });
       });
-  }, [dispatch, toast]);
+    fetchDashboard();
+  }, [dispatch, toast, fetchDashboard]);
 
   const renderTransactions = (transactions: Transaction[]) => {
     if (transactions.length === 0) {
@@ -355,7 +366,7 @@ const CryptoWalletDashboard = () => {
     }
     function showSwap(tx: Transaction) {
       if (tx.swap_from_currency && tx.swap_to_currency) {
-        return ` ${tx.swap_from_currency} → ${tx.swap_to_currency}`
+        return ` ${tx.swap_from_currency} → ${tx.swap_to_currency}`;
       }
     }
     return (
@@ -419,7 +430,8 @@ const CryptoWalletDashboard = () => {
                 </Flex>
                 <VStack spacing={0} alignItems="flex-start">
                   <Text fontWeight="bold" textTransform="capitalize">
-                    {tx.meta_type}{showSwap(tx)}
+                    {tx.meta_type}
+                    {showSwap(tx)}
                   </Text>
                   <Text fontSize="xs" color={mutedTextColor}>
                     {moment(tx.created).fromNow()}
@@ -457,9 +469,21 @@ const CryptoWalletDashboard = () => {
     );
   };
 
+  const [reloading, setReloading] = useState(false);
+  const reload = async () => {
+    setReloading(true);
+    await fetchDashboard();
+    setReloading(false);
+  };
+
   return (
     <>
-      {dashboardData && !loading ? (
+      {loading && (
+        <Center hidden={!loading} h={"80vh"}>
+          <Spinner size="lg" />
+        </Center>
+      )}
+      {dashboardData && (
         <>
           {/* Main Content Area */}
           <>
@@ -563,6 +587,15 @@ const CryptoWalletDashboard = () => {
                 <Heading as="h3" size="md" fontWeight="bold">
                   Your Assets
                 </Heading>
+                <IconButton
+                  isLoading={reloading}
+                  onClick={reload}
+                  size={"sm"}
+                  variant={"ghost"}
+                  rounded={"full"}
+                  icon={<FiRefreshCcw />}
+                  aria-label=""
+                />
               </Flex>
 
               {cryptoAssets.map((asset, index) => (
@@ -578,7 +611,15 @@ const CryptoWalletDashboard = () => {
                   borderRadius="xl"
                   boxShadow="sm"
                 >
-                  <Flex justifyContent="space-between" alignItems="center">
+                  <Flex
+                    onClick={() => {
+                      setSelectedAsset(`${asset.id}USD`);
+                      onChartOpen();
+                    }}
+                    cursor={"pointer"}
+                    justifyContent="space-between"
+                    alignItems="center"
+                  >
                     <HStack spacing={3}>
                       <Flex
                         w={10}
@@ -742,6 +783,23 @@ const CryptoWalletDashboard = () => {
               </Tabs>
             </VStack>
           </>
+
+          {/* Single Chart UI */}
+          <Modal
+            size={"xl"}
+            isOpen={isChartOpen}
+            onClose={onChartClose}
+            isCentered
+          >
+            <ModalOverlay backdropFilter="blur(5px)" />
+            <ModalContent borderRadius="xl" bg={bgColor}>
+              <ModalHeader>Real-Time Chart</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody pb={6}>
+                <MiniChart symbol={selectedAsset} colorTheme="dark" width="100%"></MiniChart>
+              </ModalBody>
+            </ModalContent>
+          </Modal>
 
           {/* Send Modal */}
           <Modal isOpen={isSendOpen} onClose={onSendClose} isCentered>
@@ -1152,10 +1210,6 @@ const CryptoWalletDashboard = () => {
             </ModalContent>
           </Modal>
         </>
-      ) : (
-        <Center hidden={!loading} h={"80vh"}>
-          <Spinner size="lg" />
-        </Center>
       )}
     </>
   );
