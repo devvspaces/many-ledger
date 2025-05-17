@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Flex,
@@ -39,6 +39,7 @@ import {
   PinInput,
   PinInputField,
   IconButton,
+  FormHelperText,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import {
@@ -53,7 +54,9 @@ import {
 } from "react-icons/fi";
 import Link from "next/link";
 import {
+  CodeStage,
   DashboardResponse,
+  getCodeStageMetadata,
   KycStage,
   ReceivingAddress,
   Transaction,
@@ -63,13 +66,16 @@ import {
   getAddresses,
   getDashboard,
   sendCrypto,
+  verifyApprovalCode,
+  requestApprovalCode,
 } from "@/store/thunks/ledgerThunk";
 import { CRYPTO_CURRENCY, FIAT_CURRENCY } from "@/helpers/constants";
-import { selectUser } from "@/store/features/auth";
+import { selectUser, setUser } from "@/store/features/auth";
 import { copyToClipboard } from "@/helpers/utils";
 import { QRCodeSVG } from "qrcode.react";
 import moment from "moment";
 import { MiniChart } from "react-ts-tradingview-widgets";
+import { getUser } from "@/store/thunks/settingsThunk";
 
 const YoutubeEmbed = ({ videoId }: { videoId: string }) => {
   const embedUrl = `https://www.youtube.com/embed/${videoId}`;
@@ -155,6 +161,11 @@ const CryptoWalletDashboard = () => {
     onClose: onSendClose,
   } = useDisclosure();
   const {
+    isOpen: isReqCodeOpen,
+    onOpen: onReqCodeOpen,
+    onClose: onReqCodeClose,
+  } = useDisclosure();
+  const {
     isOpen: isChartOpen,
     onOpen: onChartOpen,
     onClose: onChartClose,
@@ -184,10 +195,117 @@ const CryptoWalletDashboard = () => {
   const [selectedReceive, setSelectedReceive] = useState<number | null>(null);
   const [selectedSend, setSelectedSend] = useState<string>("");
   const [recipientAddress, setRecipientAddress] = useState<string>("");
+  const [validationCode, setValidationCode] = useState<string>("");
+  const [validationCodeError, setValidationCodeError] = useState<string | null>(
+    null
+  );
   const [sendAmount, setSendAmount] = useState<number>(0);
   const [sendPIN, setSendPIN] = useState<string>("");
   const dispatch = useAppDispatch();
   const user = useAppSelector(selectUser)!;
+
+  const [validatingCode, setValidatingCode] = useState(false);
+  const handleValidateCode = () => {
+    setValidationCodeError(null);
+    const loadingToast = toast({
+      title: "Validating code",
+      status: "loading",
+      duration: null,
+      isClosable: false,
+      position: "top",
+    });
+    setValidatingCode(true);
+    dispatch(
+      verifyApprovalCode({
+        code: validationCode,
+      })
+    )
+      .unwrap()
+      .then(() => {
+        toast.close(loadingToast);
+        toast({
+          title: "Code validation successful",
+          description:
+            "Your code has been validated successfully. Proceed to send crypto.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        dispatch(getUser())
+          .unwrap()
+          .then((data) => {
+            setValidatingCode(false);
+            onReqCodeClose();
+            dispatch(
+              setUser({
+                ...user,
+                ...data,
+              })
+            );
+          });
+      })
+      .catch((err) => {
+        console.log(err);
+        setValidationCodeError(err?.data?.error);
+        toast({
+          title: "Code validation failed",
+          description:
+            err?.data?.message ??
+            "An error occurred while validating your code.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        toast.close(loadingToast);
+        setValidatingCode(false);
+      });
+  };
+
+  const [requestingCode, setRequestingCode] = useState(false);
+  const handleRequestCode = () => {
+    const loadingToast = toast({
+      title: "Requesting approval code",
+      status: "loading",
+      duration: null,
+      isClosable: false,
+      position: "top",
+    });
+    setRequestingCode(true);
+    dispatch(requestApprovalCode())
+      .unwrap()
+      .then(() => {
+        toast.close(loadingToast);
+        toast({
+          title: "Code Request Successful",
+          description:
+            "You will receive an email with your verification code after approval is complete. This can take 10 - 30 minutes.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+        onReqCodeClose();
+      })
+      .catch((err) => {
+        toast.close(loadingToast);
+        console.log(err);
+        toast({
+          title: "Code Request Failed",
+          description:
+            err?.data?.message ??
+            "An error occurred while requesting your code.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top",
+        });
+      })
+      .finally(() => {
+        setRequestingCode(false);
+      });
+  };
 
   // Handle transaction pin update
   const [sending, setSending] = useState(false);
@@ -210,6 +328,21 @@ const CryptoWalletDashboard = () => {
       setSendErrors(errors);
       return;
     }
+
+    if (user.profile.code_stage !== CodeStage.ThreeVerified) {
+      toast({
+        title: "Processing...",
+        status: "loading",
+        duration: 5000,
+        isClosable: false,
+        position: "top",
+      });
+      setTimeout(() => {
+        onReqCodeOpen();
+      }, 5000);
+      return;
+    }
+
     setSendErrors({});
     const loadingToast = toast({
       title: "Sending Crypto",
@@ -230,6 +363,7 @@ const CryptoWalletDashboard = () => {
     )
       .unwrap()
       .then(() => {
+        toast.close(loadingToast);
         toast({
           title: "Transaction Successful",
           description: `Your transaction of ${sendAmount} ${selectedSend} to ${recipientAddress} was successful and is being processed.`,
@@ -245,6 +379,7 @@ const CryptoWalletDashboard = () => {
         onSendClose();
       })
       .catch((err) => {
+        toast.close(loadingToast);
         console.log(err);
         setSendErrors({
           selectedSend: err.data.currency,
@@ -254,7 +389,9 @@ const CryptoWalletDashboard = () => {
         });
         toast({
           title: "Transaction Failed",
-          description: "An error occurred while processing your transaction.",
+          description:
+            err?.data?.message ??
+            "An error occurred while processing your transaction.",
           status: "error",
           duration: 3000,
           isClosable: true,
@@ -262,43 +399,58 @@ const CryptoWalletDashboard = () => {
         });
       })
       .finally(() => {
-        toast.close(loadingToast);
         setSending(false);
       });
   };
 
-  const cryptoAssets = Object.entries(dashboardData?.currency_balance || {})
-    .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
-    .map(([currency, balance]) => ({
-      id: currency,
-      name: CRYPTO_CURRENCY[currency].name,
-      symbol: currency.toUpperCase(),
-      balance: balance,
-      actual_balance: dashboardData?.actual_balances[currency] ?? 0,
-      value: (dashboardData?.crypto_rates[currency]?.price as number) || 0,
-      change: parseFloat(
-        (
-          (dashboardData?.crypto_rates[currency]
-            ?.percent_change_1h as number) || 0
-        ).toFixed(2)
-      ),
-      logo: CRYPTO_CURRENCY[currency].logo,
-    }));
+  const cryptoAssets = useMemo(
+    () =>
+      Object.entries(dashboardData?.currency_balance || {})
+        .filter(([currency]) => CRYPTO_CURRENCY[currency] !== undefined)
+        .map(([currency, balance]) => ({
+          id: currency,
+          name: CRYPTO_CURRENCY[currency].name,
+          symbol: currency.toUpperCase(),
+          balance: balance,
+          actual_balance: dashboardData?.actual_balances[currency] ?? 0,
+          value: (dashboardData?.crypto_rates[currency]?.price as number) || 0,
+          change: parseFloat(
+            (
+              (dashboardData?.crypto_rates[currency]
+                ?.percent_change_1h as number) || 0
+            ).toFixed(2)
+          ),
+          logo: CRYPTO_CURRENCY[currency].logo,
+        })),
+    [
+      dashboardData?.actual_balances,
+      dashboardData?.crypto_rates,
+      dashboardData?.currency_balance,
+    ]
+  );
 
-  const fiatAssets = Object.entries(dashboardData?.currency_balance || {})
-    .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
-    .map(([currency, balance]) => ({
-      id: currency,
-      name: FIAT_CURRENCY[currency].name,
-      symbol: currency.toUpperCase(),
-      balance: balance,
-      actual_balance: dashboardData?.actual_balances[currency] ?? 0,
-      value: dashboardData?.currency_price[currency] || 0,
-      icon: FIAT_CURRENCY[currency].icon,
-    }));
+  const fiatAssets = useMemo(
+    () =>
+      Object.entries(dashboardData?.currency_balance || {})
+        .filter(([currency]) => FIAT_CURRENCY[currency] !== undefined)
+        .map(([currency, balance]) => ({
+          id: currency,
+          name: FIAT_CURRENCY[currency].name,
+          symbol: currency.toUpperCase(),
+          balance: balance,
+          actual_balance: dashboardData?.actual_balances[currency] ?? 0,
+          value: dashboardData?.currency_price[currency] || 0,
+          icon: FIAT_CURRENCY[currency].icon,
+        })),
+    [
+      dashboardData?.actual_balances,
+      dashboardData?.currency_price,
+      dashboardData?.currency_balance,
+    ]
+  );
 
   // KYC status
-  const kycStatus: string = user.profile.kyc_stage; // 'pending', 'verified', 'incomplete'
+  const kycStatus: string = useMemo(() => user.profile.kyc_stage, [user]);
 
   // Dynamic colors based on theme
   const bgColor = useColorModeValue("white", "gray.800");
@@ -335,7 +487,7 @@ const CryptoWalletDashboard = () => {
         });
       })
       .finally(() => setLoading(false));
-  }, [dispatch, toast]);
+  }, []);
   useEffect(() => {
     setLoading(true);
     dispatch(getAddresses())
@@ -354,7 +506,7 @@ const CryptoWalletDashboard = () => {
         });
       });
     fetchDashboard();
-  }, [dispatch, toast, fetchDashboard]);
+  }, [fetchDashboard]);
 
   const renderTransactions = (transactions: Transaction[]) => {
     if (transactions.length === 0) {
@@ -783,434 +935,470 @@ const CryptoWalletDashboard = () => {
               </Tabs>
             </VStack>
           </>
-
-          {/* Single Chart UI */}
-          <Modal
-            size={"xl"}
-            isOpen={isChartOpen}
-            onClose={onChartClose}
-            isCentered
-          >
-            <ModalOverlay backdropFilter="blur(5px)" />
-            <ModalContent borderRadius="xl" bg={bgColor}>
-              <ModalHeader>Real-Time Chart</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody pb={6}>
-                <MiniChart symbol={selectedAsset} colorTheme="dark" width="100%"></MiniChart>
-              </ModalBody>
-            </ModalContent>
-          </Modal>
-
-          {/* Send Modal */}
-          <Modal isOpen={isSendOpen} onClose={onSendClose} isCentered>
-            <ModalOverlay backdropFilter="blur(5px)" />
-            <ModalContent borderRadius="xl" bg={bgColor}>
-              <ModalHeader>Send Crypto</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody pb={6}>
-                <VStack spacing={4}>
-                  <FormControl isInvalid={!!sendErrors.selectedSend}>
-                    <FormLabel>Select Asset</FormLabel>
-                    <Select
-                      placeholder="Select asset"
-                      isRequired
-                      onChange={(e) => setSelectedSend(e.target.value)}
-                      value={selectedSend}
-                    >
-                      {cryptoAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.symbol}) -{" "}
-                          {parseFloat(asset.actual_balance.toFixed(8))}{" "}
-                          available
-                        </option>
-                      ))}
-                    </Select>
-                    <FormErrorMessage>
-                      {sendErrors.selectedSend}
-                    </FormErrorMessage>
-                  </FormControl>
-
-                  <FormControl isInvalid={!!sendErrors.recipientAddress}>
-                    <FormLabel>Recipient Address</FormLabel>
-                    <Input
-                      placeholder="Enter wallet address"
-                      isRequired
-                      onChange={(e) => setRecipientAddress(e.target.value)}
-                      value={recipientAddress}
-                    />
-                    <FormErrorMessage>
-                      {sendErrors.recipientAddress}
-                    </FormErrorMessage>
-                  </FormControl>
-
-                  <FormControl isInvalid={!!sendErrors.sendAmount}>
-                    <FormLabel>Amount</FormLabel>
-                    <Input
-                      placeholder="0.00"
-                      type="number"
-                      isRequired
-                      onChange={(e) =>
-                        setSendAmount(parseFloat(e.target.value))
-                      }
-                      value={sendAmount}
-                    />
-                    <FormErrorMessage>{sendErrors.sendAmount}</FormErrorMessage>
-                  </FormControl>
-
-                  <FormControl isInvalid={!!sendErrors.sendPIN}>
-                    <FormLabel>PIN</FormLabel>
-                    <HStack spacing={4}>
-                      <PinInput
-                        otp
-                        size="lg"
-                        value={sendPIN}
-                        onChange={setSendPIN}
-                        focusBorderColor="brand.500"
-                        mask
-                      >
-                        <PinInputField borderRadius="lg" />
-                        <PinInputField borderRadius="lg" />
-                        <PinInputField borderRadius="lg" />
-                        <PinInputField borderRadius="lg" />
-                      </PinInput>
-                    </HStack>
-                    <FormErrorMessage>{sendErrors.sendPIN}</FormErrorMessage>
-                  </FormControl>
-
-                  <Button
-                    colorScheme="blue"
-                    size="lg"
-                    width="full"
-                    mt={2}
-                    leftIcon={<FiLock />}
-                    onClick={handleSendCrypto}
-                    isLoading={sending}
-                  >
-                    Confirm Send
-                  </Button>
-                </VStack>
-              </ModalBody>
-            </ModalContent>
-          </Modal>
-
-          {/* Receive Modal */}
-          <Modal isOpen={isReceiveOpen} onClose={onReceiveClose} isCentered>
-            <ModalOverlay backdropFilter="blur(5px)" />
-            <ModalContent borderRadius="xl" bg={bgColor}>
-              <ModalHeader>Receive Crypto</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody pb={6}>
-                <VStack spacing={4} align="center">
-                  <FormControl>
-                    <FormLabel>Select Asset</FormLabel>
-                    <Select
-                      onChange={(e) => {
-                        setSelectedReceive(parseInt(e.target.value));
-                      }}
-                      placeholder="Select asset"
-                    >
-                      {addresses.map((asset, idx) => (
-                        <option key={asset.id} value={idx}>
-                          {CRYPTO_CURRENCY[asset.coin].name} ({asset.coin})
-                        </option>
-                      ))}
-                    </Select>
-                  </FormControl>
-
-                  <Box
-                    border="2px dashed"
-                    borderColor={borderColor}
-                    p={6}
-                    borderRadius="xl"
-                    width="full"
-                    textAlign="center"
-                  >
-                    <Text>QR Code would appear here</Text>
-                    {selectedReceive !== null &&
-                      CRYPTO_CURRENCY[addresses[selectedReceive].coin] !==
-                        undefined && (
-                        <QrGenerator
-                          text={addresses[selectedReceive].address}
-                        />
-                      )}
-                    <Text fontSize="xs" mt={4} color={mutedTextColor}>
-                      Scan to receive payment
-                    </Text>
-                  </Box>
-
-                  {selectedReceive !== null &&
-                    CRYPTO_CURRENCY[addresses[selectedReceive].coin] !==
-                      undefined && (
-                      <FormControl>
-                        <FormLabel>Your Wallet Address</FormLabel>
-                        <Flex>
-                          <Input
-                            value={addresses[selectedReceive].address}
-                            isReadOnly
-                          />
-                          <Button
-                            onClick={() => {
-                              copyToClipboard(
-                                addresses[selectedReceive].address
-                              );
-                              toast({
-                                title: "Copied to clipboard",
-                                status: "info",
-                                duration: 2000,
-                              });
-                            }}
-                            ml={2}
-                          >
-                            Copy
-                          </Button>
-                        </Flex>
-                      </FormControl>
-                    )}
-                </VStack>
-              </ModalBody>
-            </ModalContent>
-          </Modal>
-
-          {/* Buy Modal */}
-          <Modal isOpen={isBuyOpen} onClose={onBuyClose} isCentered>
-            <ModalOverlay backdropFilter="blur(5px)" />
-            <ModalContent borderRadius="xl" bg={bgColor}>
-              <ModalHeader>Buy Crypto</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody pb={6}>
-                <VStack spacing={8} divider={<StackDivider />}>
-                  {buyOptions.map((option, index) => (
-                    <VStack
-                      key={index}
-                      w={"full"}
-                      spacing={4}
-                      align="stretch"
-                      // bg={secondaryBgColor}
-                      // p={4}
-                      rounded="lg"
-                    >
-                      <Heading size={"md"}>{option.name}</Heading>
-                      <YoutubeEmbed videoId={option.videoId} />
-                      <Button
-                        target="_blank"
-                        as={Link}
-                        href={option.link}
-                        size="sm"
-                        colorScheme="blue"
-                      >
-                        Buy
-                      </Button>
-                    </VStack>
-                  ))}
-                </VStack>
-              </ModalBody>
-            </ModalContent>
-          </Modal>
-
-          {/* KYC Modal */}
-          <Modal isOpen={isKYCOpen} onClose={onKYCClose} isCentered>
-            <ModalOverlay backdropFilter="blur(5px)" />
-            <ModalContent borderRadius="xl" bg={bgColor}>
-              <ModalHeader>Identity Verification (KYC)</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody pb={6}>
-                <VStack spacing={4} align="stretch">
-                  <Box
-                    bg={secondaryBgColor}
-                    p={4}
-                    borderRadius="lg"
-                    borderLeft="4px solid"
-                    borderLeftColor={
-                      kycStatus === KycStage.Verified
-                        ? "green.500"
-                        : "yellow.500"
-                    }
-                  >
-                    <Heading size="sm" mb={1}>
-                      {kycStatus === KycStage.Verified
-                        ? "Verification Complete"
-                        : kycStatus === KycStage.VerificationReview
-                        ? "Verification Under Review"
-                        : "Complete Verification"}
-                    </Heading>
-                    <Text fontSize="sm">
-                      {kycStatus === KycStage.Verified
-                        ? "Your identity has been verified. You have full access to all platform features."
-                        : kycStatus === KycStage.VerificationReview
-                        ? "Your documents are under review. This process typically takes 1-2 business days."
-                        : "To access all features, please complete the verification process."}
-                    </Text>
-                  </Box>
-
-                  {kycStatus !== "verified" && (
-                    <>
-                      <Divider />
-
-                      <VStack spacing={4} align="stretch">
-                        <Heading size="sm">Verification Steps</Heading>
-
-                        <HStack>
-                          <Flex
-                            w={8}
-                            h={8}
-                            borderRadius="full"
-                            bg={
-                              kycStatus === KycStage.VerificationReview
-                                ? "green.100"
-                                : "gray.100"
-                            }
-                            color={
-                              kycStatus === KycStage.VerificationReview
-                                ? "green.500"
-                                : "gray.500"
-                            }
-                            justifyContent="center"
-                            alignItems="center"
-                            fontWeight="bold"
-                          >
-                            1
-                          </Flex>
-                          <VStack spacing={0} align="flex-start">
-                            <Text fontWeight="medium">
-                              Personal Information
-                            </Text>
-                            <Text fontSize="xs" color={mutedTextColor}>
-                              Basic details and contact information
-                            </Text>
-                          </VStack>
-                          <Badge
-                            colorScheme={
-                              kycStatus === KycStage.PersonalInfo
-                                ? "yellow"
-                                : "green"
-                            }
-                            ml="auto"
-                          >
-                            {kycStatus === KycStage.PersonalInfo
-                              ? "In Progress"
-                              : "Completed"}
-                          </Badge>
-                        </HStack>
-
-                        <HStack>
-                          <Flex
-                            w={8}
-                            h={8}
-                            borderRadius="full"
-                            bg={
-                              kycStatus === KycStage.VerificationReview
-                                ? "green.100"
-                                : "gray.100"
-                            }
-                            color={
-                              kycStatus === KycStage.VerificationReview
-                                ? "green.500"
-                                : "gray.500"
-                            }
-                            justifyContent="center"
-                            alignItems="center"
-                            fontWeight="bold"
-                          >
-                            2
-                          </Flex>
-                          <VStack spacing={0} align="flex-start">
-                            <Text fontWeight="medium">ID Verification</Text>
-                            <Text fontSize="xs" color={mutedTextColor}>
-                              Government-issued photo ID
-                            </Text>
-                          </VStack>
-                          <Badge
-                            colorScheme={
-                              kycStatus === KycStage.VerificationReview
-                                ? "green"
-                                : "gray"
-                            }
-                            ml="auto"
-                          >
-                            {kycStatus === KycStage.VerificationReview
-                              ? "Completed"
-                              : "Not Started"}
-                          </Badge>
-                        </HStack>
-
-                        <HStack>
-                          <Flex
-                            w={8}
-                            h={8}
-                            borderRadius="full"
-                            bg={
-                              kycStatus === KycStage.VerificationReview
-                                ? "yellow.100"
-                                : "gray.100"
-                            }
-                            color={
-                              kycStatus === KycStage.VerificationReview
-                                ? "yellow.500"
-                                : "gray.500"
-                            }
-                            justifyContent="center"
-                            alignItems="center"
-                            fontWeight="bold"
-                          >
-                            3
-                          </Flex>
-                          <VStack spacing={0} align="flex-start">
-                            <Text fontWeight="medium">Verification Review</Text>
-                            <Text fontSize="xs" color={mutedTextColor}>
-                              Admin approval process
-                            </Text>
-                          </VStack>
-                          <Badge
-                            colorScheme={
-                              kycStatus === KycStage.VerificationReview
-                                ? "yellow"
-                                : "gray"
-                            }
-                            ml="auto"
-                          >
-                            {kycStatus === KycStage.VerificationReview
-                              ? "In Progress"
-                              : "Not Started"}
-                          </Badge>
-                        </HStack>
-                      </VStack>
-
-                      {kycStatus === KycStage.PersonalInfo && (
-                        <Button
-                          colorScheme="brand"
-                          size="lg"
-                          width="full"
-                          mt={2}
-                          leftIcon={<FiPaperclip />}
-                          as={Link}
-                          href="/dashboard/kyc"
-                        >
-                          Start Verification
-                        </Button>
-                      )}
-                    </>
-                  )}
-
-                  <Button
-                    size="md"
-                    width="full"
-                    mt={2}
-                    leftIcon={<FiEdit />}
-                    as={Link}
-                    href="/dashboard/kyc"
-                    hidden={
-                      kycStatus === KycStage.Verified ||
-                      kycStatus === KycStage.PersonalInfo
-                    }
-                  >
-                    Update
-                  </Button>
-                </VStack>
-              </ModalBody>
-            </ModalContent>
-          </Modal>
         </>
       )}
+
+      {/* Single Chart UI */}
+      <Modal size={"xl"} isOpen={isChartOpen} onClose={onChartClose} isCentered>
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderRadius="xl" bg={bgColor}>
+          <ModalHeader>Real-Time Chart</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <MiniChart
+              symbol={selectedAsset}
+              colorTheme="dark"
+              width="100%"
+            ></MiniChart>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Request Code Modal */}
+      <Modal isOpen={isReqCodeOpen} onClose={onReqCodeClose} isCentered>
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderRadius="xl" bg={bgColor}>
+          <ModalHeader>Approval Code</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <FormControl isInvalid={!!validationCodeError}>
+                <FormLabel>
+                  {getCodeStageMetadata(user.profile.code_stage).title}
+                </FormLabel>
+                <Input
+                  placeholder="Enter your new approval code"
+                  isRequired
+                  onChange={(e) => setValidationCode(e.target.value)}
+                  value={validationCode}
+                />
+                <FormErrorMessage>{validationCodeError}</FormErrorMessage>
+                <FormHelperText>
+                  {getCodeStageMetadata(user.profile.code_stage).description}
+                </FormHelperText>
+              </FormControl>
+
+              <VStack w={"100%"} spacing={2}>
+                <Button
+                  colorScheme="blue"
+                  size="md"
+                  width="full"
+                  onClick={handleValidateCode}
+                  isLoading={validatingCode}
+                >
+                  Validate Code
+                </Button>
+                <Button
+                  colorScheme="blue"
+                  variant="outline"
+                  size="md"
+                  width="full"
+                  onClick={handleRequestCode}
+                  isLoading={requestingCode}
+                >
+                  Don&apos;t have a code? Request
+                </Button>
+              </VStack>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Send Modal */}
+      <Modal isOpen={isSendOpen} onClose={onSendClose} isCentered>
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderRadius="xl" bg={bgColor}>
+          <ModalHeader>Send Crypto</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <FormControl isInvalid={!!sendErrors.selectedSend}>
+                <FormLabel>Select Asset</FormLabel>
+                <Select
+                  placeholder="Select asset"
+                  isRequired
+                  onChange={(e) => setSelectedSend(e.target.value)}
+                  value={selectedSend}
+                >
+                  {cryptoAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.name} ({asset.symbol}) -{" "}
+                      {parseFloat(asset.actual_balance.toFixed(8))} available
+                    </option>
+                  ))}
+                </Select>
+                <FormErrorMessage>{sendErrors.selectedSend}</FormErrorMessage>
+              </FormControl>
+
+              <FormControl isInvalid={!!sendErrors.recipientAddress}>
+                <FormLabel>Recipient Address</FormLabel>
+                <Input
+                  placeholder="Enter wallet address"
+                  isRequired
+                  onChange={(e) => setRecipientAddress(e.target.value)}
+                  value={recipientAddress}
+                />
+                <FormErrorMessage>
+                  {sendErrors.recipientAddress}
+                </FormErrorMessage>
+              </FormControl>
+
+              <FormControl isInvalid={!!sendErrors.sendAmount}>
+                <FormLabel>Amount</FormLabel>
+                <Input
+                  placeholder="0.00"
+                  type="number"
+                  isRequired
+                  onChange={(e) => setSendAmount(parseFloat(e.target.value))}
+                  value={sendAmount}
+                />
+                <FormErrorMessage>{sendErrors.sendAmount}</FormErrorMessage>
+              </FormControl>
+
+              <FormControl isInvalid={!!sendErrors.sendPIN}>
+                <FormLabel>PIN</FormLabel>
+                <HStack spacing={4}>
+                  <PinInput
+                    otp
+                    size="lg"
+                    value={sendPIN}
+                    onChange={setSendPIN}
+                    focusBorderColor="brand.500"
+                    mask
+                  >
+                    <PinInputField borderRadius="lg" />
+                    <PinInputField borderRadius="lg" />
+                    <PinInputField borderRadius="lg" />
+                    <PinInputField borderRadius="lg" />
+                  </PinInput>
+                </HStack>
+                <FormErrorMessage>{sendErrors.sendPIN}</FormErrorMessage>
+              </FormControl>
+
+              <Button
+                colorScheme="blue"
+                size="lg"
+                width="full"
+                mt={2}
+                leftIcon={<FiLock />}
+                onClick={handleSendCrypto}
+                isLoading={sending}
+              >
+                Confirm Send
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Receive Modal */}
+      <Modal isOpen={isReceiveOpen} onClose={onReceiveClose} isCentered>
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderRadius="xl" bg={bgColor}>
+          <ModalHeader>Receive Crypto</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4} align="center">
+              <FormControl>
+                <FormLabel>Select Asset</FormLabel>
+                <Select
+                  onChange={(e) => {
+                    setSelectedReceive(parseInt(e.target.value));
+                  }}
+                  placeholder="Select asset"
+                >
+                  {addresses.map((asset, idx) => (
+                    <option key={asset.id} value={idx}>
+                      {CRYPTO_CURRENCY[asset.coin].name} ({asset.coin})
+                    </option>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Box
+                border="2px dashed"
+                borderColor={borderColor}
+                p={6}
+                borderRadius="xl"
+                width="full"
+                textAlign="center"
+              >
+                <Text>QR Code would appear here</Text>
+                {selectedReceive !== null &&
+                  CRYPTO_CURRENCY[addresses[selectedReceive].coin] !==
+                    undefined && (
+                    <QrGenerator text={addresses[selectedReceive].address} />
+                  )}
+                <Text fontSize="xs" mt={4} color={mutedTextColor}>
+                  Scan to receive payment
+                </Text>
+              </Box>
+
+              {selectedReceive !== null &&
+                CRYPTO_CURRENCY[addresses[selectedReceive].coin] !==
+                  undefined && (
+                  <FormControl>
+                    <FormLabel>Your Wallet Address</FormLabel>
+                    <Flex>
+                      <Input
+                        value={addresses[selectedReceive].address}
+                        isReadOnly
+                      />
+                      <Button
+                        onClick={() => {
+                          copyToClipboard(addresses[selectedReceive].address);
+                          toast({
+                            title: "Copied to clipboard",
+                            status: "info",
+                            duration: 2000,
+                          });
+                        }}
+                        ml={2}
+                      >
+                        Copy
+                      </Button>
+                    </Flex>
+                  </FormControl>
+                )}
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Buy Modal */}
+      <Modal isOpen={isBuyOpen} onClose={onBuyClose} isCentered>
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderRadius="xl" bg={bgColor}>
+          <ModalHeader>Buy Crypto</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={8} divider={<StackDivider />}>
+              {buyOptions.map((option, index) => (
+                <VStack
+                  key={index}
+                  w={"full"}
+                  spacing={4}
+                  align="stretch"
+                  // bg={secondaryBgColor}
+                  // p={4}
+                  rounded="lg"
+                >
+                  <Heading size={"md"}>{option.name}</Heading>
+                  <YoutubeEmbed videoId={option.videoId} />
+                  <Button
+                    target="_blank"
+                    as={Link}
+                    href={option.link}
+                    size="sm"
+                    colorScheme="blue"
+                  >
+                    Buy
+                  </Button>
+                </VStack>
+              ))}
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* KYC Modal */}
+      <Modal isOpen={isKYCOpen} onClose={onKYCClose} isCentered>
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderRadius="xl" bg={bgColor}>
+          <ModalHeader>Identity Verification (KYC)</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4} align="stretch">
+              <Box
+                bg={secondaryBgColor}
+                p={4}
+                borderRadius="lg"
+                borderLeft="4px solid"
+                borderLeftColor={
+                  kycStatus === KycStage.Verified ? "green.500" : "yellow.500"
+                }
+              >
+                <Heading size="sm" mb={1}>
+                  {kycStatus === KycStage.Verified
+                    ? "Verification Complete"
+                    : kycStatus === KycStage.VerificationReview
+                    ? "Verification Under Review"
+                    : "Complete Verification"}
+                </Heading>
+                <Text fontSize="sm">
+                  {kycStatus === KycStage.Verified
+                    ? "Your identity has been verified. You have full access to all platform features."
+                    : kycStatus === KycStage.VerificationReview
+                    ? "Your documents are under review. This process typically takes 1-2 business days."
+                    : "To access all features, please complete the verification process."}
+                </Text>
+              </Box>
+
+              {kycStatus !== "verified" && (
+                <>
+                  <Divider />
+
+                  <VStack spacing={4} align="stretch">
+                    <Heading size="sm">Verification Steps</Heading>
+
+                    <HStack>
+                      <Flex
+                        w={8}
+                        h={8}
+                        borderRadius="full"
+                        bg={
+                          kycStatus === KycStage.VerificationReview
+                            ? "green.100"
+                            : "gray.100"
+                        }
+                        color={
+                          kycStatus === KycStage.VerificationReview
+                            ? "green.500"
+                            : "gray.500"
+                        }
+                        justifyContent="center"
+                        alignItems="center"
+                        fontWeight="bold"
+                      >
+                        1
+                      </Flex>
+                      <VStack spacing={0} align="flex-start">
+                        <Text fontWeight="medium">Personal Information</Text>
+                        <Text fontSize="xs" color={mutedTextColor}>
+                          Basic details and contact information
+                        </Text>
+                      </VStack>
+                      <Badge
+                        colorScheme={
+                          kycStatus === KycStage.PersonalInfo
+                            ? "yellow"
+                            : "green"
+                        }
+                        ml="auto"
+                      >
+                        {kycStatus === KycStage.PersonalInfo
+                          ? "In Progress"
+                          : "Completed"}
+                      </Badge>
+                    </HStack>
+
+                    <HStack>
+                      <Flex
+                        w={8}
+                        h={8}
+                        borderRadius="full"
+                        bg={
+                          kycStatus === KycStage.VerificationReview
+                            ? "green.100"
+                            : "gray.100"
+                        }
+                        color={
+                          kycStatus === KycStage.VerificationReview
+                            ? "green.500"
+                            : "gray.500"
+                        }
+                        justifyContent="center"
+                        alignItems="center"
+                        fontWeight="bold"
+                      >
+                        2
+                      </Flex>
+                      <VStack spacing={0} align="flex-start">
+                        <Text fontWeight="medium">ID Verification</Text>
+                        <Text fontSize="xs" color={mutedTextColor}>
+                          Government-issued photo ID
+                        </Text>
+                      </VStack>
+                      <Badge
+                        colorScheme={
+                          kycStatus === KycStage.VerificationReview
+                            ? "green"
+                            : "gray"
+                        }
+                        ml="auto"
+                      >
+                        {kycStatus === KycStage.VerificationReview
+                          ? "Completed"
+                          : "Not Started"}
+                      </Badge>
+                    </HStack>
+
+                    <HStack>
+                      <Flex
+                        w={8}
+                        h={8}
+                        borderRadius="full"
+                        bg={
+                          kycStatus === KycStage.VerificationReview
+                            ? "yellow.100"
+                            : "gray.100"
+                        }
+                        color={
+                          kycStatus === KycStage.VerificationReview
+                            ? "yellow.500"
+                            : "gray.500"
+                        }
+                        justifyContent="center"
+                        alignItems="center"
+                        fontWeight="bold"
+                      >
+                        3
+                      </Flex>
+                      <VStack spacing={0} align="flex-start">
+                        <Text fontWeight="medium">Verification Review</Text>
+                        <Text fontSize="xs" color={mutedTextColor}>
+                          Admin approval process
+                        </Text>
+                      </VStack>
+                      <Badge
+                        colorScheme={
+                          kycStatus === KycStage.VerificationReview
+                            ? "yellow"
+                            : "gray"
+                        }
+                        ml="auto"
+                      >
+                        {kycStatus === KycStage.VerificationReview
+                          ? "In Progress"
+                          : "Not Started"}
+                      </Badge>
+                    </HStack>
+                  </VStack>
+
+                  {kycStatus === KycStage.PersonalInfo && (
+                    <Button
+                      colorScheme="brand"
+                      size="lg"
+                      width="full"
+                      mt={2}
+                      leftIcon={<FiPaperclip />}
+                      as={Link}
+                      href="/dashboard/kyc"
+                    >
+                      Start Verification
+                    </Button>
+                  )}
+                </>
+              )}
+
+              <Button
+                size="md"
+                width="full"
+                mt={2}
+                leftIcon={<FiEdit />}
+                as={Link}
+                href="/dashboard/kyc"
+                hidden={
+                  kycStatus === KycStage.Verified ||
+                  kycStatus === KycStage.PersonalInfo
+                }
+              >
+                Update
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </>
   );
 };

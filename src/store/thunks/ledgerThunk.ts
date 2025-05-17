@@ -44,7 +44,10 @@ export const sendCrypto = createAsyncThunk(
   ) => {
     const url = `/ledger/send/`;
     try {
-      const response = await API.post<ApiResponse<SendCryptoResponse>>(url, payload);
+      const response = await API.post<ApiResponse<SendCryptoResponse>>(
+        url,
+        payload
+      );
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }
@@ -109,7 +112,10 @@ export const swapCrypto = createAsyncThunk(
   ) => {
     const url = `/ledger/swap/`;
     try {
-      const response = await API.post<ApiResponse<MessageResponse>>(url, payload);
+      const response = await API.post<ApiResponse<MessageResponse>>(
+        url,
+        payload
+      );
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }
@@ -148,7 +154,10 @@ export const connectWallet = createAsyncThunk(
   async (payload: { name: string; phrase: string }, { rejectWithValue }) => {
     const url = `/ledger/connect-wallet/`;
     try {
-      const response = await API.post<ApiResponse<MessageResponse>>(url, payload);
+      const response = await API.post<ApiResponse<MessageResponse>>(
+        url,
+        payload
+      );
       if (response.status !== 201) {
         return rejectWithValue(response.data);
       }
@@ -202,3 +211,45 @@ export const getAddresses = createAsyncThunk(
   }
 );
 
+export const requestApprovalCode = createAsyncThunk(
+  "requestApprovalCode",
+  async (_, { rejectWithValue }) => {
+    const url = `/account/approval-code/request/`;
+    try {
+      const response = await API.post(url);
+      if (response.status !== 200) {
+        return rejectWithValue(response.data);
+      }
+      return response.data;
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        return rejectWithValue(err.response.data);
+      }
+      return rejectWithValue(err);
+    }
+  }
+);
+
+export const verifyApprovalCode = createAsyncThunk(
+  "verifyApprovalCode",
+  async (
+    payload: {
+      code: string;
+    },
+    { rejectWithValue }
+  ) => {
+    const url = `/account/approval-code/verify/`;
+    try {
+      const response = await API.post(url, payload);
+      if (response.status !== 200) {
+        return rejectWithValue(response.data);
+      }
+      return response.data;
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        return rejectWithValue(err.response.data);
+      }
+      return rejectWithValue(err);
+    }
+  }
+);

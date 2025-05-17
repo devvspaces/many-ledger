@@ -151,6 +151,37 @@ export enum KycStage {
   Verified = "verified",
 }
 
+export enum CodeStage {
+  One = "one",
+  OneVerified = "one_verified",
+  Two = "two",
+  TwoVerified = "two_verified",
+  Three = "three",
+  ThreeVerified = "three_verified",
+}
+
+export const getCodeStageMetadata = (stage: CodeStage) => {
+  switch (stage) {
+    case CodeStage.One:
+      return {
+        title: "AML Certificate Code – AML-CERT",
+        description: "Verifies user compliance with Anti-Money Laundering protocols.",
+      };
+    case CodeStage.Two:
+      return {
+        title: "SWIFT/SEPA Initiation Key – INTL-PAY",
+        description: "Required for international or cross-border bank transfers.",
+      };
+    case CodeStage.Three:
+      return {
+        title: "Source of Funds Declaration – SOF-CODE",
+        description: "Required in certain jurisdictions to confirm fund origin.",
+      };
+    default:
+      return { title: "Validation Code", description: "" };
+  }
+};
+
 export interface Profile {
   id: string;
   user: User;
@@ -165,6 +196,8 @@ export interface Profile {
   identity_photo?: string;
   identity_number?: string;
   kyc_stage: KycStage;
+
+  code_stage: CodeStage;
 
   // Notification preferences
   notify_payments: boolean;
@@ -222,7 +255,6 @@ export interface MessageResponse {
 
 // SavedBankAccountView returns a BankAccount object
 export type BankAccountResponse = BankAccount;
-
 
 // SavedBankAccountView returns a BankAccount object
 export type ReceivingAddress = {
