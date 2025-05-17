@@ -13,6 +13,8 @@ const exclude_auth_paths = [
   "/account/login/",
   "/account/register/",
   "/account/token/refresh/",
+  "/account/reset-password/",
+  "/account/forget-password",
 ];
 
 let isRefreshing = false;

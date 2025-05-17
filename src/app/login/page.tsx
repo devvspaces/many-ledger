@@ -157,7 +157,7 @@ const LoginPage = () => {
         router.push("/dashboard");
       })
       .catch((err) => {
-        setErrors(err.data);
+        setErrors(err.data ?? {});
         toast({
           title: "Error",
           description: "An error occurred while signing in",
@@ -260,7 +260,7 @@ const LoginPage = () => {
               <MotionBox variants={itemVariants} w="full">
                 <form onSubmit={handleLogin}>
                   <VStack spacing={5} align="flex-start">
-                    <FormControl isRequired isInvalid={!!errors.username}>
+                    <FormControl isRequired isInvalid={!!errors?.username}>
                       <FormLabel>Username</FormLabel>
                       <InputGroup>
                         <Input
@@ -279,11 +279,11 @@ const LoginPage = () => {
                         />
                       </InputGroup>
                       <FormErrorMessage>
-                        {errors.username && errors.username[0]}
+                        {errors?.username && errors?.username[0]}
                       </FormErrorMessage>
                     </FormControl>
 
-                    <FormControl isRequired isInvalid={!!errors.password}>
+                    <FormControl isRequired isInvalid={!!errors?.password}>
                       <FormLabel>Password</FormLabel>
                       <InputGroup>
                         <Input

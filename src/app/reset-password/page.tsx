@@ -368,7 +368,7 @@ const ResetPasswordPage = () => {
       bgGradient={bgGradient}
       p={4}
     >
-      <Container maxW="container.md">
+      <Container maxW="container.md" p={0}>
         <MotionFlex
           variants={containerVariants}
           initial="hidden"
@@ -398,7 +398,10 @@ const ResetPasswordPage = () => {
           <MotionBox
             variants={itemVariants}
             w="full"
-            p={8}
+            p={{
+              base: 4,
+              md: 8
+            }}
             borderRadius="2xl"
             boxShadow="xl"
             bg={glassBg}
@@ -513,7 +516,10 @@ const ResetPasswordPage = () => {
                         bg={phraseBg}
                         width="full"
                       >
-                        <Grid templateColumns="repeat(3, 1fr)" gap={3}>
+                        <Grid templateColumns={{
+                          base: "repeat(2, 1fr)",
+                          md: "repeat(3, 1fr)",
+                        }} gap={3}>
                           {phraseInputs.map((word, index) => (
                             <GridItem key={index}>
                               <MotionBox
